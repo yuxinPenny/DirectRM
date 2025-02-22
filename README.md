@@ -112,11 +112,11 @@ dorado download --model all
 
 1. Organized new_pod5_dir
 
-![Figure1](/Users/zhangyuxin/Desktop/Figure1.png)
+![Figure1](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure1.png)
 
 2. Bam files
 
-<img src="/Users/zhangyuxin/Library/Application Support/typora-user-images/Screenshot 2025-02-21 at 13.56.10.png" alt="Screenshot 2025-02-21 at 13.56.10" style="zoom:25%;" />
+![Figure2](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure2.png)
 
 ### 3.2 Feature extraction
 
