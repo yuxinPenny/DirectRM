@@ -90,15 +90,8 @@ python3 ./DirectRM/scripts/preprocessing.py \
 - `-o`: output directory for the base calling and alignment results
 - `--ref`: reference.fa
 - `--dorado`: path to the dorado package. For example, `./software/dorado-0.6.2-linux-x64/bin/dorado`
-
-```bash
-dorado download --model all
-```
-
 - `--model`: path to the dorado model used for base calling. 
-
   Please download available Dorado models with: 
-
   ```
   dorado download --model all
   ```
