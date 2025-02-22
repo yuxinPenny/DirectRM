@@ -278,7 +278,7 @@ python3 ./DirectRM/scripts/read2site.py \
 
 Site-level results for each modification class
 
-<img src="/Users/zhangyuxin/Library/Application Support/typora-user-images/Screenshot 2025-02-22 at 14.51.03.png" alt="Screenshot 2025-02-22 at 14.51.03" style="zoom:50%;" />
+![Figure6](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure6.png)
 
 | seqnames | pos(istion) | strand | max_prob   | noisyor_prob | count | coverage |
 | -------- | ----------- | ------ | ---------- | ------------ | ----- | -------- |
