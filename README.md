@@ -153,7 +153,7 @@ python3 ./DirectRM/scripts/feature_extraction.py \
 
 #### Output
 
-![Screenshot 2025-02-21 at 16.23.17](/Users/zhangyuxin/Library/Application Support/typora-user-images/Screenshot 2025-02-21 at 16.23.17.png)
+![Figure3](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure3.png)
 
 1. CSV files: coordinates of kmers
 
@@ -199,7 +199,7 @@ We provided three binary de novo modification models, each model was trained wit
 
 npy file speficy the probability of being modified
 
-![Screenshot 2025-02-21 at 16.35.16](/Users/zhangyuxin/Library/Application Support/typora-user-images/Screenshot 2025-02-21 at 16.35.16.png)
+![Figure4](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure4.png)
 
 ### 3.4 Modification type and position inference
 
@@ -257,7 +257,7 @@ We provided four model artchitecture:
 
 Read level prediction results for each class, grouped by modification type and chromsome/transcripts
 
-![Screenshot 2025-02-22 at 14.43.48](/Users/zhangyuxin/Desktop/Screenshot 2025-02-22 at 14.43.48.png)
+![Figure5](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure5.png)
 
 | read_id                              | seqnames | pos(istion) | strand | ac4c(_probability) |
 | ------------------------------------ | -------- | ----------- | ------ | ------------------ |
