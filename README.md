@@ -38,6 +38,14 @@ All processes related to DirectRM were tested on
 - Python3
 - Basic python packages: `math`, `os`, `re`, `sys`, `csv`, `json`, `argparse`, `tqdm`, `numpy`, `pandas`, `random`
 
+### Installation
+
+It may take several minutes to install
+
+```bash
+git clone https://github.com/yuxinPenny/DirectRM
+```
+
 ### Input data
 
 - ##### Raw data in Pod5 format
