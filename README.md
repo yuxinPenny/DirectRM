@@ -80,6 +80,8 @@ To optimize the memory usage, we split the total Pod5 directory into multiple pa
 3) Compress, sort, and index the alignment file. 
 4) Delete the intermediate SAM files to save space.
 
+This step may take 2-3 minutes for single pod5 file with GPU device.
+
 ```bash
 python3 ./DirectRM/scripts/preprocessing.py \
 -i <pod5_dir> \
@@ -129,6 +131,8 @@ python3 ./DirectRM/scripts/preprocessing.py \
 
 **Note**: To use remora, we recommend to create an independent conda environment with **python=3.9** for it.
 
+This step may take 30 minutes for 20 pod5 files.
+
 ```bash
 python3 ./DirectRM/scripts/feature_extraction.py \
 --pod5_dir <new_pod5_dir> \
@@ -173,6 +177,8 @@ python3 ./DirectRM/scripts/feature_extraction.py \
 
 This step aims to detect modified kmers
 
+This step may take less than one minute for 80000 reads file with GPU device.
+
 ```bash
 python3 ./DirectRM/scripts/denovo_inference.py \
 --feature_dir <feature_dir> \
@@ -205,6 +211,8 @@ npy file speficy the probability of being modified
 ### 3.4 Modification type and position inference
 
 This step aims to identify the modification type(s) and its(their) position within the modified kmers.
+
+This step may take less than one minute for 80000 reads file with GPU device.
 
 ```bash
 python3 ./DirectRM/scripts/inference.py \
