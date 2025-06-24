@@ -172,6 +172,42 @@ python3 ./DirectRM/scripts/feature_extraction.py \
    2. stat: mean, median, and etc of signal events
    3. level: expected kmer levels
    4. bse: base call errors
+  
+#### Optional Uncalled4 resquiggle
+DirectRM also maintains the compatibility of using custom resquiggle algorithms, e.g., Uncalled4 (https://github.com/skovaka/uncalled4)
+Uncalled4 resquiggle should be performed after Base calling and before feature extraction
+```bash
+N=<NUM_split>
+for ((i=0; i<=N; i++)); do
+
+  echo "analyzing split${i}"
+
+  uncalled4 align \
+  --ref <reference file> \
+  --reads <new_pod5_dir>/split${i} \
+  --bam-in <bam_dir>/split${i}_sorted.bam \
+  --bam-out <bam_dir_new>/split${i}.bam" \
+  -p 10 --kit <kit_name>
+
+  samtools sort <bam_dir>/split${i}.bam \
+  -o <bam_dir>/split${i}_sorted.bam
+
+  samtools index <bam_dir>/split${i}_sorted.bam
+
+done
+
+python3 ./DirectRM/scripts/feature_extraction.py \
+--pod5_dir <new_pod5_dir> \
+--bam <bam_dir> \
+--reg <interested_regions> \
+--level <kmer_level_tables> \
+-o <feature_dir> \
+--splits 0 10 \
+--kmer 9 --step 5
+--resquiggle False
+
+## --resquiggle False: stop resquiggle with remora
+```
 
 ### 3.3 De novo modification detection
 
