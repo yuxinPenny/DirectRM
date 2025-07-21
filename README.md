@@ -38,6 +38,14 @@ All processes related to DirectRM were tested on
 - Python3
 - Basic python packages: `math`, `os`, `re`, `sys`, `csv`, `json`, `argparse`, `tqdm`, `numpy`, `pandas`, `random`
 
+### Installation
+
+It may take several minutes to install
+
+```bash
+git clone https://github.com/yuxinPenny/DirectRM
+```
+
 ### Input data
 
 - ##### Raw data in Pod5 format
@@ -53,7 +61,7 @@ All processes related to DirectRM were tested on
 - ##### Target regions
 
   Please provide a **CSV** file of regions you want analyze. The table should contain following columns, and each line represents one region. The coordinates should be consistent to above reference file.
-  
+
   | seqnames | start | end  | width | strand |
   | -------- | ----- | ---- | ----- | ------ |
   | chr1     | 207   | 307  | 101   | +      |
@@ -72,6 +80,8 @@ To optimize the memory usage, we split the total Pod5 directory into multiple pa
 3) Compress, sort, and index the alignment file. 
 4) Delete the intermediate SAM files to save space.
 
+This step may take 2-3 minutes for single pod5 file with GPU device.
+
 ```bash
 python3 ./DirectRM/scripts/preprocessing.py \
 -i <pod5_dir> \
@@ -86,17 +96,16 @@ python3 ./DirectRM/scripts/preprocessing.py \
 #### Parameter explaination
 
 - `-i`:  the original pod5 folder
+
 - `--new_dir`: the script will randomly move 20 Pod4 files to a new folder (named as **splitN**) under <new_pod5_dir> folder. 
+
 - `-o`: output directory for the base calling and alignment results
+
 - `--ref`: reference.fa
+
 - `--dorado`: path to the dorado package. For example, `./software/dorado-0.6.2-linux-x64/bin/dorado`
 
-```bash
-dorado download --model all
-```
-
 - `--model`: path to the dorado model used for base calling. 
-
   Please download available Dorado models with: 
 
   ```
@@ -112,11 +121,11 @@ dorado download --model all
 
 1. Organized new_pod5_dir
 
-![Figure1](/Users/zhangyuxin/Desktop/Figure1.png)
+![Figure1](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure1.png)
 
 2. Bam files
 
-<img src="/Users/zhangyuxin/Library/Application Support/typora-user-images/Screenshot 2025-02-21 at 13.56.10.png" alt="Screenshot 2025-02-21 at 13.56.10" style="zoom:25%;" />
+![Figure2](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure2.png)
 
 ### 3.2 Feature extraction
 
@@ -127,6 +136,8 @@ dorado download --model all
 3. Base call error features: mismatch, insertion, deletion, and quality.
 
 **Note**: To use remora, we recommend to create an independent conda environment with **python=3.9** for it.
+
+This step may take 30 minutes for 20 pod5 files.
 
 ```bash
 python3 ./DirectRM/scripts/feature_extraction.py \
@@ -153,7 +164,7 @@ python3 ./DirectRM/scripts/feature_extraction.py \
 
 #### Output
 
-![Screenshot 2025-02-21 at 16.23.17](/Users/zhangyuxin/Library/Application Support/typora-user-images/Screenshot 2025-02-21 at 16.23.17.png)
+![Figure3](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure3.png)
 
 1. CSV files: coordinates of kmers
 
@@ -168,9 +179,49 @@ python3 ./DirectRM/scripts/feature_extraction.py \
    3. level: expected kmer levels
    4. bse: base call errors
 
+#### Optional Uncalled4 resquiggle
+
+DirectRM also maintains the compatibility of using custom resquiggle algorithms, e.g., Uncalled4 (https://github.com/skovaka/uncalled4)
+Uncalled4 resquiggle should be performed after Base calling and before feature extraction
+
+```bash
+N=<NUM_split>
+for ((i=0; i<=N; i++)); do
+
+  echo "analyzing split${i}"
+
+  uncalled4 align \
+  --ref <reference file> \
+  --reads <new_pod5_dir>/split${i} \
+  --bam-in <bam_dir>/split${i}_sorted.bam \
+  --bam-out <bam_dir_new>/split${i}.bam" \
+  -p 10 --kit <kit_name>
+
+  samtools sort <bam_dir>/split${i}.bam \
+  -o <bam_dir>/split${i}_sorted.bam
+
+  samtools index <bam_dir>/split${i}_sorted.bam
+
+done
+
+python3 ./DirectRM/scripts/feature_extraction.py \
+--pod5_dir <new_pod5_dir> \
+--bam <bam_dir> \
+--reg <interested_regions> \
+--level <kmer_level_tables> \
+-o <feature_dir> \
+--splits 0 10 \
+--kmer 9 --step 5
+--resquiggle False
+
+## --resquiggle False: stop resquiggle with remora
+```
+
 ### 3.3 De novo modification detection
 
 This step aims to detect modified kmers
+
+This step may take less than one minute for 80000 reads file with GPU device.
 
 ```bash
 python3 ./DirectRM/scripts/denovo_inference.py \
@@ -199,11 +250,13 @@ We provided three binary de novo modification models, each model was trained wit
 
 npy file speficy the probability of being modified
 
-![Screenshot 2025-02-21 at 16.35.16](/Users/zhangyuxin/Library/Application Support/typora-user-images/Screenshot 2025-02-21 at 16.35.16.png)
+![Figure4](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure4.png)
 
 ### 3.4 Modification type and position inference
 
 This step aims to identify the modification type(s) and its(their) position within the modified kmers.
+
+This step may take less than one minute for 80000 reads file with GPU device.
 
 ```bash
 python3 ./DirectRM/scripts/inference.py \
@@ -257,7 +310,7 @@ We provided four model artchitecture:
 
 Read level prediction results for each class, grouped by modification type and chromsome/transcripts
 
-![Screenshot 2025-02-22 at 14.43.48](/Users/zhangyuxin/Desktop/Screenshot 2025-02-22 at 14.43.48.png)
+![Figure5](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure5.png)
 
 | read_id                              | seqnames | pos(istion) | strand | ac4c(_probability) |
 | ------------------------------------ | -------- | ----------- | ------ | ------------------ |
@@ -278,7 +331,7 @@ python3 ./DirectRM/scripts/read2site.py \
 
 Site-level results for each modification class
 
-<img src="/Users/zhangyuxin/Library/Application Support/typora-user-images/Screenshot 2025-02-22 at 14.51.03.png" alt="Screenshot 2025-02-22 at 14.51.03" style="zoom:50%;" />
+![Figure6](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure6.png)
 
 | seqnames | pos(istion) | strand | max_prob   | noisyor_prob | count | coverage |
 | -------- | ----------- | ------ | ---------- | ------------ | ----- | -------- |
