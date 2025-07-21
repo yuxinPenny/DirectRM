@@ -121,11 +121,11 @@ python3 ./DirectRM/scripts/preprocessing.py \
 
 1. Organized new_pod5_dir
 
-![Figure1](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure1.png)
+![Figure1](https://github.com/yuxinPenny/DirectRM/tree/main/pics/Figure1.png)
 
 2. Bam files
 
-![Figure2](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure2.png)
+![Figure2](https://github.com/yuxinPenny/DirectRM/tree/main/pics/Figure2.png)
 
 ### 3.2 Feature extraction
 
@@ -164,7 +164,7 @@ python3 ./DirectRM/scripts/feature_extraction.py \
 
 #### Output
 
-![Figure3](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure3.png)
+![Figure3](https://github.com/yuxinPenny/DirectRM/tree/main/pics/Figure3.png)
 
 1. CSV files: coordinates of kmers
 
@@ -250,7 +250,7 @@ We provided three binary de novo modification models, each model was trained wit
 
 npy file speficy the probability of being modified
 
-![Figure4](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure4.png)
+![Figure4](https://github.com/yuxinPenny/DirectRM/tree/main/pics/Figure4.png)
 
 ### 3.4 Modification type and position inference
 
@@ -310,7 +310,7 @@ We provided four model artchitecture:
 
 Read level prediction results for each class, grouped by modification type and chromsome/transcripts
 
-![Figure5](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure5.png)
+![Figure5](https://github.com/yuxinPenny/DirectRM/tree/main/pics/Figure5.png)
 
 | read_id                              | seqnames | pos(istion) | strand | ac4c(_probability) |
 | ------------------------------------ | -------- | ----------- | ------ | ------------------ |
@@ -331,7 +331,7 @@ python3 ./DirectRM/scripts/read2site.py \
 
 Site-level results for each modification class
 
-![Figure6](https://github.com/yuxinPenny/DirectRM/blob/main/pics/Figure6.png)
+![Figure6](https://github.com/yuxinPenny/DirectRM/tree/main/pics/Figure6.png)
 
 | seqnames | pos(istion) | strand | max_prob   | noisyor_prob | count | coverage |
 | -------- | ----------- | ------ | ---------- | ------------ | ----- | -------- |
