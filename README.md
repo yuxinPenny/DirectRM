@@ -38,6 +38,8 @@ All processes related to DirectRM were tested on
 - Python3
 - Basic python packages: `math`, `os`, `re`, `sys`, `csv`, `json`, `argparse`, `tqdm`, `numpy`, `pandas`, `random`
 
+We also provide the Conda environment.yml files (remora-env.yml to run remora for feature extraction, and DirectRM.yml for other steps) to ensure the reproducibility of the required environments.
+
 ### Installation
 
 It may take several minutes to install
