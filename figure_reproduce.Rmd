@@ -1,0 +1,1466 @@
+---
+title: "Results reproduce"
+output: html_document
+date: "2025-08-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "Final_review"
+output: html_document
+date: "2025-08-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup}
+# install.packages("/Users/zhangyuxin/Desktop/DirectMultiRM/RMAnno_0.0.0.9000.tar.gz",repos = NULL,type = "source")
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(ggfortify)
+library(plotROC)
+library(pROC)
+library(BSgenome.Hsapiens.UCSC.hg38)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+library(GenomicRanges)
+library(MetaTX)
+library(ggseqlogo)
+library(reshape2)
+library(UpSetR)
+library(rtracklayer)
+library(IRanges)
+library(ggvenn)
+library(circlize)
+library(stringr)
+library(seqinr)
+library(tidyverse)
+library(scales)
+library(RMAnno)
+BSgenome <- function(dna,circ_seqs = NA,genome = NA,organism = NA,common_name = NA,provider = NA,release_date = NA,
+                     release_name = NA,source_url = NA,tmpdir) {
+  if (!is(dna, "DNAStringSet"))
+    dna <- as(dna, "DNAStringSet")
+  seqnames <- names(dna)
+  if (is.null(seqnames))
+    stop("'dna' must have names")
+  if (!is.character(circ_seqs))
+    circ_seqs <- as.character(circ_seqs)
+  if (!identical(circ_seqs, NA_character_)) {
+    if (anyNA(circ_seqs) ||
+        anyDuplicated(circ_seqs) ||
+        !all(circ_seqs %in% seqnames))
+      stop(wmsg("when not set to NA, 'circ_seqs' must ",
+                "contain unique sequence names that are ",
+                "present in 'names(dna)'"))
+  
+  }
+  
+  stopifnot(isSingleStringOrNA(genome),
+            isSingleStringOrNA(organism),
+            isSingleStringOrNA(common_name),
+            isSingleStringOrNA(provider),
+            isSingleStringOrNA(release_date),
+            isSingleStringOrNA(release_name),
+            isSingleStringOrNA(source_url))
+                     
+  seqs_dirpath <- tempfile(pattern = "BSgenome_seqs_dir_", tmpdir = tmpdir)
+  dir.create(seqs_dirpath)
+  twobit_filepath <- file.path(seqs_dirpath, "single_sequences.2bit")
+  rtracklayer::export(dna, twobit_filepath)
+
+  BSgenome:::BSgenome(organism = as.character(organism),
+                      common_name = as.character(organism),
+                      provider = as.character(provider),
+                      provider_version = as.character(genome),
+                      release_date = as.character(release_date),
+                      release_name = as.character(release_name),
+                      source_url = as.character(source_url),
+                      seqnames = seqnames,
+                      circ_seqs = circ_seqs,
+                      mseqnames = NULL,
+                      seqs_pkgname = NA_character_,
+                      seqs_dirpath = seqs_dirpath)
+                     
+                     #unlink(seqs_dirpath, recursive = T)
+                     
+}
+# 
+fasta_files <-readDNAStringSet("/Users/zhangyuxin/Desktop/DirectMultiRM/NGS/htlv-1/AB513134.1.fa")
+library(stringr)
+names(fasta_files) <-str_split_fixed(seqlevels(fasta_files), n = 2, pattern = ' ')[, 1]
+htlv_bsgenome <- BSgenome(fasta_files,organism = 'htlv',genome = "htlv",
+                           tmpdir = '/Users/zhangyuxin/Desktop/DirectMultiRM/NGS/htlv-1/tmp')
+```
+
+# Figure 1
+## 1a
+```{r}
+df <- read.csv("/Users/zhangyuxin/Desktop/figure_data/AD004/denovo_label_pca.csv")
+neg_id <- which(rowSums(df[,73:75])==0)
+pos_id <- which(rowSums(df[,73:75])!=0)
+id <- c(sample(pos_id,500),sample(neg_id,500))
+df <- df[id,]
+df$label1 <- as.factor(df$label1)
+df$label2 <- as.factor(df$label2)
+df$label3 <- as.factor(df$label3)
+pca_res <- prcomp(df[,1:(ncol(df)-3)],scale. = TRUE)
+p1 <- autoplot(pca_res,data = df, colour = "label1",size = 0.05) + 
+  scale_color_manual(name = "p-value < 0.01",values = c("#818282","#c0434a")) +
+  theme_bw(base_size = 6) + theme(panel.grid = element_blank(),legend.position = "right",
+                                  legend.background = element_blank(),aspect.ratio = 1)
+p2 <- autoplot(pca_res,data = df, colour = "label2",size = 0.05) + 
+  scale_color_manual(name = "have errors",values = c("#818282","#c0434a")) +
+  theme_bw(base_size = 6) + theme(panel.grid = element_blank(),legend.position = "right",
+                                  legend.background = element_blank(),aspect.ratio = 1)
+p3 <- autoplot(pca_res,data = df, colour = "label3",size = 0.05) +
+  scale_color_manual(name = "p-value < 0.01 & \n have errors",values = c("#818282","#c0434a")) + 
+  theme_bw(base_size = 6) + theme(panel.grid = element_blank(),legend.position = "right",
+                                  legend.background = element_blank(),aspect.ratio = 1)
+p_pca <- ggarrange(p1,p2,p3,ncol = 2,nrow = 2)
+p_pca
+```
+
+## 1b
+```{r}
+df1 <- read.csv("/Users/zhangyuxin/Desktop/figure_data/AD004/denovo_label1_roc.csv")
+score <- round(auc(df1$labels,df1$preds),3)
+df1$color <- paste("LabelA:AUC= ",score,sep = "")
+df2 <- read.csv("/Users/zhangyuxin/Desktop/figure_data/AD004/denovo_label2_roc.csv")
+score <- round(auc(df2$labels,df2$preds),3)
+df2$color <- paste("LabelB:AUC= ",score,sep = "")
+df3 <- read.csv("/Users/zhangyuxin/Desktop/figure_data/AD004/denovo_label3_roc.csv")
+score <- round(auc(df3$labels,df3$preds),3)
+df3$color <- paste("LabelC:AUC= ",score,sep = "")
+df <- rbind(df1,df2,df3)
+p_roc <- ggplot(df,aes(d = labels,m = preds,color = color)) +
+  geom_roc(labels = FALSE,n.cuts = 10,linealpha=1,pointsize=0.1,size = 0.5)+
+  style_roc(ylab = "Sensitivity",xlab = "1-specificity",guide = FALSE) +
+  theme_bw(base_size = 6) +
+  theme(panel.background = element_blank(),
+        legend.title = element_blank(),
+        legend.background = element_blank(),axis.text = element_blank(),
+        legend.box.background = element_blank(),
+        axis.ticks = element_blank(),legend.position = c(0.6,0.2),
+        panel.grid = element_blank(),aspect.ratio = 1) +
+  scale_color_manual(values = c("#5379a4","#e5b870","#6aa078")) 
+p_roc
+```
+
+## 1c
+```{r}
+unmod_denovo <- read.csv("/Users/zhangyuxin/Desktop/figure_data/IVET/unmod/unmod_denovo.csv")
+unmod_denovo$label <- 0
+unmod_denovo[unmod_denovo$denovo>0.5,]$label <- 1
+unmod_denovo <- unmod_denovo %>% group_by(seqnames,start,end,width,strand) %>% 
+  summarise(prob = max(denovo),
+            rate = sum(label)/n(),
+            count = sum(label),
+            coverage = n()) %>% as.data.frame()
+
+m6a_denovo <- read.csv("/Users/zhangyuxin/Desktop/figure_data/IVET/m6A/m6a_denovo.csv")
+m6a_denovo$label <- 0
+m6a_denovo[m6a_denovo$denovo>0.5,]$label <- 1
+m6a_denovo <- m6a_denovo %>% group_by(seqnames,start,end,width,strand) %>%
+  summarise(prob = max(denovo),
+            count = sum(label),
+            rate = sum(label)/n(),
+            coverage = n()) %>% as.data.frame()
+
+get_f1 <- function(df){
+  TP <- sum(df$pred==1&df$label==1)
+  FP <- sum(df$pred==1&df$label==0)
+  FN <- sum(df$pred==0&df$label==1)
+  pr <- TP/(TP+FP)
+  rc <- TP/(TP+FN)
+  f1 <- 2 * ((pr*rc)/(pr+rc))
+  return(c(pr,rc,f1))
+}
+cutoff <- seq(0,30,1)
+df2 <- data.frame(cutoff = cutoff,
+                  pr = 0,rc = 0,f1=0)
+for(j in cutoff){
+  pos_tmp <- m6a_denovo[m6a_denovo$coverage > j,]
+  pos_tmp <- data.frame(pred = as.integer(pos_tmp$count>1),
+                        label = 1)
+  neg_tmp <- unmod_denovo[unmod_denovo$coverage > j,]
+  neg_tmp <- data.frame(pred = as.integer(neg_tmp$count>1),
+                        label = 0)
+  size <- min(nrow(pos_tmp),nrow(neg_tmp))
+  pos_tmp <- pos_tmp[sample(1:nrow(pos_tmp),size),]
+  neg_tmp <- neg_tmp[sample(1:nrow(neg_tmp),size),]
+  df <- rbind(pos_tmp,neg_tmp)
+  df2[j,2:4] <- get_f1(df)
+  
+}
+
+df2$cutoff <- df2$cutoff + 1
+df2 <- df2[-nrow(df2),]
+
+df3 <- melt(df2,id.vars = "cutoff")
+p <- ggplot(df3) +
+  geom_line(aes(x = cutoff,y = value,color = variable)) +
+  geom_point(aes(x = cutoff,y = value,color = variable),size = 0.2) +
+  theme_bw(base_size = 6) + theme(panel.grid = element_blank(),panel.background = element_blank(),
+                                  legend.position = "bottom") +
+  scale_color_manual(values = c("#e5b870","#5379a4","#c0434a"),
+                     labels = c("Precision","Recall","F1-score"),
+                     name = "Metrics") +
+  ylab("Score") + xlab("Coverage cutoff") 
+p
+```
+
+# Figure 2
+## 2a
+```{r}
+csv2gr <- function(csv_dir){
+  csv <- read.csv(csv_dir)
+  gr <- GRanges(seqnames = csv$chr,
+                IRanges(start = csv$chromStart, end = csv$chromEnd),
+                strand = csv$strand)
+  return(gr)
+}
+
+df2gr <- function(df_dir){
+  df <- read.csv(df_dir)
+  gr <- GRanges(seqnames = df$seqnames,
+                IRanges(start = df$start, width = 1),
+                strand = df$strand)
+  return(gr)
+}
+peak <- 300
+NGS <- "/Users/zhangyuxin/Desktop/figure_data/NGS/AD38"
+
+ac4c_peak <- csv2gr(paste(NGS,'/AD38_ac4C/hg38_hbv_control_ac4C/Mod.csv', sep = ''))
+ac4c_peak <- ac4c_peak[width(ac4c_peak)<peak]
+ac4c <- df2gr(paste(NGS,'/processed/ac4c.csv', sep = ''))
+ac4c <- ac4c[ac4c%over%ac4c_peak]
+m1a_peak <- csv2gr(paste(NGS,'/AD38_m1A/hg38_hbv_control_m1A/Mod.csv', sep = ''))
+m1a_peak <- m1a_peak[width(m1a_peak)<peak]
+m1a <- df2gr(paste(NGS,'/processed/m1a.csv', sep = ''))
+m1a <- m1a[m1a%over%m1a_peak]
+
+m5c_peak <- csv2gr(paste(NGS,'/AD38_m5C/hg38_m5C_hbv_control/Mod.csv', sep = ''))
+m5c_peak <- m5c_peak[width(m5c_peak)<peak]
+m5c <- df2gr(paste(NGS,'/processed/m5c.csv', sep = ''))
+m5c <- m5c[m5c%over%m5c_peak]
+
+m6a_peak <- csv2gr(paste(NGS,'/AD38_m6A/hg38_m6A_hbv_control/Mod.csv', sep = ''))
+m6a_peak <- m6a_peak[width(m6a_peak)<peak]
+m6a <- df2gr(paste(NGS,'/processed/m6a.csv', sep = ''))
+m6a <- m6a[m6a%over%m6a_peak]
+
+m7g_peak <- csv2gr(paste(NGS,'/AD38_m7G/hg38_hbv_control_m7G/Mod.csv', sep = ''))
+m7g_peak <- m7g_peak[width(m7g_peak)<peak]
+m7g <- df2gr(paste(NGS,'/processed/m7g.csv', sep = ''))
+m7g <- m7g[m7g%over%m7g_peak]
+
+psi_peak <- csv2gr(paste(NGS,'/AD38_psi/hg38_hbv_control_psi/Mod.csv', sep = ''))
+psi_peak <- psi_peak[width(psi_peak)<peak]
+psi <- df2gr(paste(NGS,'/processed/psi.csv', sep = ''))
+psi <- psi[psi%over%psi_peak]
+
+NGS_sites <- unique(c(ac4c,m1a,m5c,m6a,m7g,psi))
+```
+```{r}
+overlaps <- as.data.frame(findOverlaps(m6a+4,m6a))
+freq <- overlaps %>% group_by(queryHits) %>% summarise(num = n()) %>% as.data.frame()
+kmer <- m6a+4
+kmer$num <- NA
+kmer[overlaps$queryHits,]$num <- freq[overlaps$queryHits,]$num
+kmer$seq <- as.character(DNAStringSet(Views(BSgenome.Hsapiens.UCSC.hg38,kmer)))
+kmer$IVT_num <- vcountPattern("A",kmer$seq)
+length(kmer[kmer$IVT_num>kmer$num])/length(kmer)
+```
+```{r}
+kmer$diff <- kmer$IVT_num - kmer$num
+breaks <- c(0,1,2,3,5,9)
+labels <- c("Natural","Low abberrant","Moderate aberrant", "High aberrant","Severe aberrant")
+kmer$label <- cut(kmer$diff,breaks = breaks,
+                  labels = labels,include.lowest = TRUE,right = FALSE,
+                  ordered_result = TRUE)
+
+```
+```{r}
+df <- as.data.frame(table(kmer$label))
+colnames(df) <- c("categories","freq")
+df$percentage <- df$freq/sum(df$freq)
+df$label <- percent(df$percentage)
+df$position <- cumsum(df$percentage) - df$percentage/2
+
+p1 <- ggplot(df) +
+  geom_col(aes(x = "", y = percentage,fill = categories),width = 1,color = "white",linewidth=0.5) +
+  coord_polar(theta = "y",start = 0) +
+  theme_void(base_size = 7) + theme(legend.position = "left") +
+  scale_fill_manual(values = c("#a8cae8","#faee85","#fbb46f","#f58383","#f1766d")) +
+  geom_text(aes(x = "",y = position, label = label),
+            color = "white",
+            fontface = "bold",
+            check_overlap = FALSE)
+p1
+```
+
+## 2b
+```{r}
+csv2gr <- function(csv_dir){
+  csv <- read.csv(csv_dir)
+  gr <- GRanges(seqnames = csv$chr,
+                IRanges(start = csv$chromStart, end = csv$chromEnd),
+                strand = csv$strand)
+  return(gr)
+}
+
+df2gr <- function(df_dir){
+  df <- read.csv(df_dir)
+  gr <- GRanges(seqnames = df$seqnames,
+                IRanges(start = df$start, width = 1),
+                strand = df$strand)
+  return(gr)
+}
+peak <- 500
+NGS <- "/Users/zhangyuxin/Desktop/figure_data/NGS/AD38"
+
+ac4c_peak <- csv2gr(paste(NGS,'/AD38_ac4C/hg38_hbv_control_ac4C/Mod.csv', sep = ''))
+ac4c_peak <- ac4c_peak[width(ac4c_peak)<peak]
+ac4c <- df2gr(paste(NGS,'/processed/ac4c.csv', sep = ''))
+ac4c <- ac4c[ac4c%over%ac4c_peak]
+m1a_peak <- csv2gr(paste(NGS,'/AD38_m1A/hg38_hbv_control_m1A/Mod.csv', sep = ''))
+m1a_peak <- m1a_peak[width(m1a_peak)<peak]
+m1a <- df2gr(paste(NGS,'/processed/m1a.csv', sep = ''))
+m1a <- m1a[m1a%over%m1a_peak]
+
+m5c_peak <- csv2gr(paste(NGS,'/AD38_m5C/hg38_m5C_hbv_control/Mod.csv', sep = ''))
+m5c_peak <- m5c_peak[width(m5c_peak)<peak]
+m5c <- df2gr(paste(NGS,'/processed/m5c_new.csv', sep = ''))
+m5c <- m5c[m5c%over%m5c_peak]
+
+m6a_peak <- csv2gr(paste(NGS,'/AD38_m6A/hg38_m6A_hbv_control/Mod.csv', sep = ''))
+m6a_peak <- m6a_peak[width(m6a_peak)<peak]
+m6a <- df2gr(paste(NGS,'/processed/m6a.csv', sep = ''))
+m6a <- m6a[m6a%over%m6a_peak]
+
+m7g_peak <- csv2gr(paste(NGS,'/AD38_m7G/hg38_hbv_control_m7G/Mod.csv', sep = ''))
+m7g_peak <- m7g_peak[width(m7g_peak)<peak]
+m7g <- df2gr(paste(NGS,'/processed/m7g.csv', sep = ''))
+m7g <- m7g[m7g%over%m7g_peak]
+
+psi_peak <- csv2gr(paste(NGS,'/AD38_psi/hg38_hbv_control_psi/Mod.csv', sep = ''))
+psi_peak <- psi_peak[width(psi_peak)<peak]
+psi <- df2gr(paste(NGS,'/processed/psi.csv', sep = ''))
+psi <- psi[psi%over%psi_peak]
+
+NGS_sites <- unique(c(ac4c,m1a,m5c,m6a,m7g,psi))
+
+multi <- GRanges()
+types <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+for(type in types){
+  for(type2 in types){
+    if(type != type2){
+      mod1 <- get(type)
+      mod1$type <- type
+      mod1$mod_neighbor <- NA
+      mod1$neighbor_pos <- NA
+      mod2 <- get(type2)
+      overlaps <- findOverlaps(mod1+9,mod2+9)
+      if(length(overlaps) > 0){
+        mod1[queryHits(overlaps)]$mod_neighbor <- type2
+        mod1[queryHits(overlaps)]$neighbor_pos <- start(mod2[subjectHits(overlaps)])
+        mod1 <- mod1[-which(is.na(mod1$mod_neighbor))]
+        tmp <- GRanges(seqnames = seqnames(mod1),
+                       IRanges(start = pmin(start(mod1),mod1$neighbor_pos),
+                               end = pmax(start(mod1),mod1$neighbor_pos)),
+                       strand = strand(mod1),
+                       mod = mod1$type,
+                       mod_neighbor = mod1$mod_neighbor)
+        tmp$seq <- as.character(DNAStringSet(Views(BSgenome.Hsapiens.UCSC.hg38,tmp)))
+        multi <- c(multi,tmp)
+      }
+    }
+  }
+}
+
+multi_s9 <- resize(multi,9,fix = "start")
+multi_c9 <- resize(multi,9,fix = "center")
+multi_e9 <- resize(multi,9,fix = "end")
+multi9mer <- c(multi_s9,multi_c9,multi_e9)
+mcols(multi9mer) <- NULL
+multi9mer <- unique(multi9mer)
+
+df <- as.data.frame(matrix(data = 0,ncol = 6,nrow = length(multi9mer)))
+colnames(df) <- types
+for(type in types){
+  mod <- get(type)
+  df[multi9mer%over%mod,type] <- 1
+}
+mcols(multi9mer) <- df
+```
+
+
+```{r}
+df <- df[rowSums(df)>1,]
+pdf("/Users/zhangyuxin/Desktop/final_review/figure2/2b(1).pdf",
+    width = 4,height = 2)
+upset(df,nsets = 6,order.by = "freq",
+      main.bar.color = "#a1e0fb",
+      matrix.color = "#a1e0fb", 
+      sets.bar.color = "#fed477",
+      mb.ratio = c(0.6,0.4),
+      text.scale = 0.9,
+      point.size = 0.9,line.size = 0.5,
+      queries = list(list(
+        query = intersects,
+        params = list("ac4c","m5c"),
+        color = "#787ffb",active = T
+      )))
+dev.off()
+```
+
+## 2d
+```{r}
+df <- read.csv("/Users/zhangyuxin/Desktop/review/modelout/ad1_ml5_roc.csv")
+types <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+df$color <- "blue"
+for(type in types){
+  tmp <- df[df$type==type,]
+  score <- round(auc(tmp$labels,tmp$preds),3)
+  df[df$type==type,]$color <- paste(type, ":AUROC = ",score,sep = "")
+}
+
+df$kit <- "RNA002"
+
+tmp2 <- df
+tmp2 <- rbind(tmp2,df)
+
+p_roc <- ggplot(df,aes(d = labels,m = preds,color = color)) +
+  geom_roc(labels = FALSE,n.cuts = 10,linealpha=1,pointsize=0.1,size = 0.5)+
+  style_roc(ylab = "Sensitivity",xlab = "1-specificity",guide = FALSE) + 
+  theme_bw(base_size = 6) +
+  theme(panel.background = element_blank(),
+        legend.title = element_blank(),
+        legend.background = element_blank(),axis.text = element_blank(),
+        legend.box.background = element_blank(),
+        axis.ticks = element_blank(),legend.position = c(0.6,0.4),
+        panel.grid = element_blank(),aspect.ratio = 1) + 
+  scale_color_manual(values = c("#b99ac8","#5981b2","#e5b870","#a0bf67","#db87a4","#6aa078")) 
+p_roc
+
+ggsave(p_roc,filename = "/Users/zhangyuxin/Desktop/final_review/figure2/2d(002).pdf",
+       width = 40,height = 40,units = "mm")
+
+```
+
+## 2e
+```{r}
+kit <- c("AD1","AD004")
+type <- "m6a"
+grl <- GRangesList()
+for(k in kit){
+  tmp <- read.csv(paste("/Users/zhangyuxin/Desktop/review/data/",k,"/remora_qual/ml5/",type,".csv",sep = ""))
+  tmp <- GRanges(seqnames = tmp$seqnames,
+                 IRanges(start = tmp$pos,width = 1),
+                 strand = tmp$strand,
+                 prob = tmp$max_prob,
+                 count = tmp$count,
+                 coverage = tmp$coverage,
+                 mod_rate = tmp$count/tmp$coverage)
+  tmp <- tmp[tmp$count > 1&tmp$coverage>30]
+  grl[[k]] <- tmp
+}
+
+remap_results <- MetaTX::remapCoordMulti(grl,txdb = TxDb.Hsapiens.UCSC.hg38.knownGene)
+p_txplot <- metaTXplotMulti(remapresults_list = remap_results,
+                            num_bin = 10,includeNeighborDNA = TRUE,
+                            relativeProportion = c(1,1,1,1),lambda = 2,
+                            adjust = 0.2)
+# remap_results <- MetaTX::remapCoord(features = gr,txdb = TxDb.Hsapiens.UCSC.hg38.knownGene)
+# p_txplot <- metaTXplot(remap_results)
+
+p_txplot <- p_txplot + scale_fill_manual(values = c("#a1e0fb","#fed477"),
+                                         labels = c("DirectRM-002","DirectRM-004")) +
+  scale_color_manual(values = c("#a1e0fb","#fed477"),
+                     labels = c("DirectRM-002","DirectRM-004")) +
+  theme(panel.grid = element_blank(),legend.position = "right",
+        legend.text = element_text(size = 7),axis.text = element_text(size = 6),
+        axis.title = element_text(size = 7))
+p_txplot
+```
+
+
+## 2f
+### (1)
+```{r}
+p <- ggseqlogo(as.character(DNAStringSet(Views(BSgenome.Hsapiens.UCSC.hg38,grl[["AD1"]]+2))),
+          method = "prob") + 
+  theme(axis.text = element_text(size = 6),axis.title = element_text(size = 7))
+```
+
+```{r}
+p <- ggseqlogo(as.character(DNAStringSet(Views(BSgenome.Hsapiens.UCSC.hg38,grl[["AD004"]]+2))),
+          method = "prob") + 
+  theme(axis.text = element_text(size = 6),axis.title = element_text(size = 7))
+```
+
+## 2g
+```{r}
+df <- read.csv("/Users/zhangyuxin/Desktop/review/modelout/ml5_auc.csv")
+
+df <- melt(df)
+
+df$algorithm <- "Independent"
+df[grepl("ml",df$variable),]$algorithm <- "Integrated"
+df$kit <- "DirectRM-002"
+df[grepl("004",df$variable),]$kit <- "DirectRM-004"
+
+p <- ggplot(df) +
+  geom_col(aes(x = type, y = value, fill = algorithm),
+           width = 0.5,position = "dodge") + 
+  theme_bw(base_size = 6) + theme(panel.background = element_blank(),
+                     panel.grid = element_blank(),legend.position = "top") +
+  coord_cartesian(ylim = c(0.5,1)) + 
+  facet_wrap(~df$kit,ncol = 1) +
+  scale_fill_manual(values = c("#a8cae8","#faee85"))
+p
+```
+
+## 2h
+## num modified neighbors
+```{r}
+csv2gr <- function(csv_dir){
+  csv <- read.csv(csv_dir)
+  gr <- GRanges(seqnames = csv$chr,
+                IRanges(start = csv$chromStart, end = csv$chromEnd),
+                strand = csv$strand)
+  return(gr)
+}
+
+df2gr <- function(df_dir){
+  df <- read.csv(df_dir)
+  gr <- GRanges(seqnames = df$seqnames,
+                IRanges(start = df$start, width = 1),
+                strand = df$strand)
+  return(gr)
+}
+peak <- 500
+NGS <- "/Users/zhangyuxin/Desktop/figure_data/NGS/AD38"
+
+ac4c_peak <- csv2gr(paste(NGS,'/AD38_ac4C/hg38_hbv_control_ac4C/Mod.csv', sep = ''))
+ac4c_peak <- ac4c_peak[width(ac4c_peak)<peak]
+ac4c <- df2gr(paste(NGS,'/processed/ac4c.csv', sep = ''))
+ac4c <- ac4c[ac4c%over%ac4c_peak]
+
+m1a_peak <- csv2gr(paste(NGS,'/AD38_m1A/hg38_hbv_control_m1A/Mod.csv', sep = ''))
+m1a_peak <- m1a_peak[width(m1a_peak)<peak]
+m1a <- df2gr(paste(NGS,'/processed/m1a.csv', sep = ''))
+m1a <- m1a[m1a%over%m1a_peak]
+
+m5c_peak <- csv2gr(paste(NGS,'/AD38_m5C/hg38_m5C_hbv_control/Mod.csv', sep = ''))
+m5c_peak <- m5c_peak[width(m5c_peak)<peak]
+m5c <- df2gr(paste(NGS,'/processed/m5c_new.csv', sep = ''))
+m5c <- m5c[m5c%over%m5c_peak]
+
+m6a_peak <- csv2gr(paste(NGS,'/AD38_m6A/hg38_m6A_hbv_control/Mod.csv', sep = ''))
+m6a_peak <- m6a_peak[width(m6a_peak)<peak]
+m6a <- df2gr(paste(NGS,'/processed/m6a.csv', sep = ''))
+m6a <- m6a[m6a%over%m6a_peak]
+
+m7g_peak <- csv2gr(paste(NGS,'/AD38_m7G/hg38_hbv_control_m7G/Mod.csv', sep = ''))
+m7g_peak <- m7g_peak[width(m7g_peak)<peak]
+m7g <- df2gr(paste(NGS,'/processed/m7g.csv', sep = ''))
+m7g <- m7g[m7g%over%m7g_peak]
+
+psi_peak <- csv2gr(paste(NGS,'/AD38_psi/hg38_hbv_control_psi/Mod.csv', sep = ''))
+psi_peak <- psi_peak[width(psi_peak)<peak]
+psi <- df2gr(paste(NGS,'/processed/psi.csv', sep = ''))
+psi <- psi[psi%over%psi_peak]
+
+NGS_sites <- unique(c(ac4c,m1a,m5c,m6a,m7g,psi))
+overlaps <- findOverlaps(NGS_sites+9,NGS_sites)
+overlaps <- as.data.frame(overlaps) %>% group_by(queryHits) %>% summarise(num_neighbors = n()) %>% as.data.frame()
+NGS_sites$num_neighbors <- overlaps$num_neighbors -1
+breaks <- c(0,1,3,5,9)
+labels <- c("0","1-2","3-4", ">5")
+
+NGS_sites$label <- cut(NGS_sites$num_neighbors,breaks = breaks,
+                  labels = labels,include.lowest = TRUE,right = FALSE,
+                  ordered_result = TRUE)
+
+df <- as.data.frame(table(NGS_sites$label))
+colnames(df) <- c("categories","freq")
+df$percentage <- df$freq/sum(df$freq)
+df$label <- percent(df$percentage)
+df$position <- cumsum(df$percentage) - df$percentage/2
+
+p1 <- ggplot(df) +
+  geom_col(aes(x = "", y = percentage,fill = categories),width = 1,color = "white",linewidth=0.5) +
+  coord_polar(theta = "y",start = 0) +
+  theme_void(base_size = 6) + theme(legend.position = "left") +
+  scale_fill_manual(values = c("#a8cae8","#faee85","#fbb46f","#f58383")) +
+  geom_text(aes(x = "",y = position, label = label),
+            color = "white",
+            size = 4,
+            fontface = "bold",
+            check_overlap = FALSE)
+p1
+```
+
+### independent
+```{r}
+types <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+gr1 <- GRanges()
+for(type in types){
+  tmp <- read.csv(paste("/Users/zhangyuxin/Desktop/review/data/AD004/independent5/",type,".csv",sep = ""))
+  tmp <- GRanges(seqnames = tmp$seqnames,
+                 IRanges(start = tmp$pos,width = 1),
+                 strand = tmp$strand,
+                 prob = tmp$max_prob,
+                 count = tmp$count,
+                 coverage = tmp$coverage,
+                 mod_rate = tmp$count/tmp$coverage)
+  gr1 <- c(gr1,tmp)
+}
+gr1 <- unique(gr1)
+gr1 <- gr1[gr1$prob>0.5&gr1$coverage>10]
+length(gr1[gr1%over%NGS_sites])/length(gr1)
+overlaps <- findOverlaps(gr1+9,gr1)
+overlaps <- as.data.frame(overlaps) %>% group_by(queryHits) %>% summarise(num_neighbors = n()) %>% as.data.frame()
+gr1$num_neighbors <- overlaps$num_neighbors -1
+
+breaks <- c(0,1,3,5,9)
+labels <- c("0","1-2","3-4", ">5")
+
+gr1$label <- cut(gr1$num_neighbors,breaks = breaks,
+                  labels = labels,include.lowest = TRUE,right = FALSE,
+                  ordered_result = TRUE)
+
+df <- as.data.frame(table(gr1$label))
+colnames(df) <- c("categories","freq")
+df$percentage <- df$freq/sum(df$freq)
+df$label <- percent(df$percentage)
+df$position <- cumsum(df$percentage) - df$percentage/2
+
+p2 <- ggplot(df) +
+  geom_col(aes(x = "", y = percentage,fill = categories),width = 1,color = "white",linewidth=0.5) +
+  coord_polar(theta = "y",start = 0) +
+  theme_void(base_size = 6) + theme(legend.position = "left") +
+  scale_fill_manual(values = c("#a8cae8","#faee85","#fbb46f","#f58383")) +
+  geom_text(aes(x = "",y = position, label = label),
+            color = "white",
+            size = 4,
+            fontface = "bold",
+            check_overlap = FALSE)
+p2
+```
+### integrated
+```{r}
+gr1 <- GRanges()
+for(type in types){
+  tmp <- read.csv(paste("/Users/zhangyuxin/Desktop/review/data/AD004/ml5/",type,".csv",sep = ""))
+  tmp <- GRanges(seqnames = tmp$seqnames,
+                 IRanges(start = tmp$pos,width = 1),
+                 strand = tmp$strand,
+                 prob = tmp$max_prob,
+                 count = tmp$count,
+                 coverage = tmp$coverage,
+                 mod_rate = tmp$count/tmp$coverage)
+  gr1 <- c(gr1,tmp)
+}
+gr1 <- unique(gr1)
+gr1 <- gr1[gr1$prob>0.5&gr1$coverage>10]
+length(gr1[gr1%over%NGS_sites])/length(gr1)
+overlaps <- findOverlaps(gr1+9,gr1)
+overlaps <- as.data.frame(overlaps) %>% group_by(queryHits) %>% summarise(num_neighbors = n()) %>% as.data.frame()
+gr1$num_neighbors <- overlaps$num_neighbors -1
+
+breaks <- c(0,1,3,5,9)
+labels <- c("0","1-2","3-4", ">5")
+
+gr1$label <- cut(gr1$num_neighbors,breaks = breaks,
+                  labels = labels,include.lowest = TRUE,right = FALSE,
+                  ordered_result = TRUE)
+
+df <- as.data.frame(table(gr1$label))
+colnames(df) <- c("categories","freq")
+df$percentage <- df$freq/sum(df$freq)
+df$label <- percent(df$percentage)
+df$position <- cumsum(df$percentage) - df$percentage/2
+
+p3 <- ggplot(df) +
+  geom_col(aes(x = "", y = percentage,fill = categories),width = 1,color = "white",linewidth=0.5) +
+  coord_polar(theta = "y",start = 0) +
+  theme_void(base_size = 6) + theme(legend.position = "left") +
+  scale_fill_manual(values = c("#a8cae8","#faee85","#fbb46f","#f58383")) +
+  geom_text(aes(x = "",y = position, label = label),
+            color = "white",
+            size = 4,
+            fontface = "bold",
+            check_overlap = FALSE)
+p3
+```
+
+
+## 2i
+```{r}
+df <- read.csv("/Users/zhangyuxin/Desktop/review/ivet_errors.csv")
+df <- melt(df)
+
+p <- ggplot(df) +
+  geom_col(aes(x = "",y = value, fill = variable),
+           width = 0.5,position = "dodge") +
+  ylab("Error rate") + theme_bw(base_size = 6) + theme(panel.background = element_blank(),
+                                          panel.grid = element_blank(),
+                                          legend.position = "top") +
+  scale_fill_manual(values = c("#fbb46f","#f58383")) +
+  facet_wrap(~df$dataset,nrow=2)
+p
+```
+
+# Figure 4
+## 4a
+### (rep1)
+```{r}
+types <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+preds <- read.csv("/Users/zhangyuxin/Desktop/review/data/MT4-1/new_mt4_roc_preds.csv")
+colnames(preds) <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+preds <- melt(preds)
+labels <- read.csv("/Users/zhangyuxin/Desktop/review/data/MT4-1/new_mt4_roc_labels.csv")
+colnames(labels) <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+labels <- melt(labels)
+df <- data.frame(preds = preds$value,
+                 labels = labels$value,
+                 type = preds$variable)
+df$color <- "blue"
+for(type in types){
+  tmp <- df[df$type==type,]
+  score <- round(auc(tmp$labels,tmp$preds),3)
+  df[df$type==type,]$color <- paste(type, ":AUROC = ",score,sep = "")
+}
+
+df$rep <- "Rep1"
+
+p_roc <- ggplot(df,aes(d = labels,m = preds,color = color)) +
+  geom_roc(labels = FALSE,n.cuts = 10,linealpha=1,pointsize=0.05,size = 0.5)+
+  style_roc(ylab = "Sensitivity",xlab = "1-specificity",guide = FALSE) +
+  theme_bw(base_size = 6) +
+  theme(panel.background = element_blank(),panel.grid = element_blank(),
+        legend.title = element_blank(),
+        legend.background = element_blank(),axis.text = element_blank(),
+        legend.box.background = element_blank(),
+        axis.ticks = element_blank(),legend.position = c(0.5,0.3)) +
+  scale_color_manual(values = c("#a8cae8","#faee85","#fbb46f","#f58383","#db87a4","#6aa078")) 
+p_roc
+```
+### rep2
+```{r}
+types <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+preds <- read.csv("/Users/zhangyuxin/Desktop/review/data/MT4-2/new_mt42_roc_preds.csv")
+colnames(preds) <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+preds <- melt(preds)
+labels <- read.csv("/Users/zhangyuxin/Desktop/review/data/MT4-2/new_mt42_roc_labels.csv")
+colnames(labels) <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+labels <- melt(labels)
+df <- data.frame(preds = preds$value,
+                 labels = labels$value,
+                 type = preds$variable)
+df$color <- "blue"
+for(type in types){
+  tmp <- df[df$type==type,]
+  score <- round(auc(tmp$labels,tmp$preds),3)
+  df[df$type==type,]$color <- paste(type, ":AUROC = ",score,sep = "")
+}
+
+df$rep <- "Rep2"
+
+p_roc <- ggplot(df,aes(d = labels,m = preds,color = color)) +
+  geom_roc(labels = FALSE,n.cuts = 10,linealpha=1,pointsize=0.05,size = 0.5)+
+  style_roc(ylab = "Sensitivity",xlab = "1-specificity",guide = FALSE) +
+  theme_bw(base_size = 6) +
+  theme(panel.background = element_blank(),panel.grid = element_blank(),
+        legend.title = element_blank(),
+        legend.background = element_blank(),axis.text = element_blank(),
+        legend.box.background = element_blank(),
+        axis.ticks = element_blank(),legend.position = c(0.5,0.3)) +
+  scale_color_manual(values = c("#a8cae8","#faee85","#fbb46f","#f58383","#db87a4","#6aa078")) 
+p_roc
+```
+
+## 4b
+```{r}
+csv2gr <- function(csv_dir){
+  csv <- read.csv(csv_dir)
+  gr <- GRanges(seqnames = csv$chr,
+                IRanges(start = csv$chromStart, end = csv$chromEnd),
+                strand = csv$strand)
+  return(gr)
+}
+
+df2gr <- function(df_dir){
+  df <- read.csv(df_dir)
+  gr <- GRanges(seqnames = df$seqnames,
+                IRanges(start = df$start, end = df$end),
+                strand = df$strand)
+  return(gr)
+}
+peak <- 500
+NGS <- "/Users/zhangyuxin/Desktop/figure_data/NGS/MT4"
+
+ac4c_peak <- csv2gr(paste(NGS,'/hg38_control_ac4C/Mod.csv', sep = ''))
+ac4c_peak <- ac4c_peak[width(ac4c_peak)<peak]
+ac4c <- df2gr(paste(NGS,'/processed/ac4c.csv', sep = ''))
+ac4c <- ac4c[ac4c%over%ac4c_peak]
+
+m1a_peak <- csv2gr(paste(NGS,'/hg38_control_m1A/Mod.csv', sep = ''))
+m1a_peak <- m1a_peak[width(m1a_peak)<peak]
+m1a <- df2gr(paste(NGS,'/processed/m1a.csv', sep = ''))
+m1a <- m1a[m1a%over%m1a_peak]
+
+m5c_peak <- csv2gr(paste(NGS,'/hg38_control_m5C/Mod.csv', sep = ''))
+m5c_peak <- m5c_peak[width(m5c_peak)<peak]
+m5c <- df2gr(paste(NGS,'/processed/m5c_new.csv', sep = ''))
+m5c <- m5c[m5c%over%m5c_peak]
+
+m6a_peak <- csv2gr(paste(NGS,'/hg38_control_m6A/Mod.csv', sep = ''))
+m6a_peak <- m6a_peak[width(m6a_peak)<peak]
+m6a <- df2gr(paste(NGS,'/processed/m6a.csv', sep = ''))
+m6a <- m6a[m6a%over%m6a_peak]
+
+m7g_peak <- csv2gr(paste(NGS,'/hg38_control_m7G/Mod.csv', sep = ''))
+m7g_peak <- m7g_peak[width(m7g_peak)<peak]
+m7g <- df2gr(paste(NGS,'/processed/m7g.csv', sep = ''))
+m7g <- m7g[m7g%over%m7g_peak]
+
+psi_peak <- csv2gr(paste(NGS,'/MACS2_MT4/Mod.csv', sep = ''))
+psi_peak <- psi_peak[width(psi_peak)<peak]
+psi <- df2gr(paste(NGS,'/processed/psi.csv', sep = ''))
+total_ngs_site <- c(ac4c,m1a,m5c,m6a,m7g,psi)
+total_ngs_peak <- c(ac4c_peak,m1a_peak,m5c_peak,m6a_peak,m7g_peak,psi_peak)
+
+# AtoI and hm5c for MT4
+df <- data.frame()
+for(i in 1:3){
+  tmp <- read.csv(paste(NGS,"/m6A_AtoI/rep",i,".csv",sep = ""))
+  df <- rbind(df,tmp)
+}
+atoi <- GRanges(seqnames = df$seqnames,
+                IRanges(start = df$start,end = df$end),
+                strand = df$strand)
+atoi <- unique(atoi)
+atoi <- atoi[-(atoi%over%total_ngs_peak)]
+hm5c <- read.csv(paste(NGS,"/hg38_control_hm5C/Mod.csv",sep = ""))
+hm5c <- GRanges(seqnames = hm5c$chr,
+                IRanges(hm5c$chromStart,end = hm5c$chromEnd),
+                strand = hm5c$strand)
+hm5c <- hm5c[-(hm5c%over%total_ngs_peak)]
+ngs_denovo <- c(atoi,hm5c)
+```
+```{r}
+df4 <- data.frame()
+for(r in 1:2){
+  denovo <- read.csv(paste("/Users/zhangyuxin/Desktop/figure_data/MT4-",r,"/denovo_preds.csv",sep = ""))
+  denovo <- GRanges(seqnames = denovo$seqnames,
+                    IRanges(start = denovo$start,end = denovo$end),
+                    strand = denovo$strand,
+                    read_id = denovo$read_id,
+                    denovo = denovo$denovo,
+                    ac4c = denovo$ac4c,m1a = denovo$m1a,m5c = denovo$m5c,
+                    m6a = denovo$m6a,m7g = denovo$m7g,psi = denovo$psi)
+  denovo <- denovo[denovo%over%ngs_denovo]
+  
+  df1 <- as.data.frame(denovo[denovo%over%atoi])
+  df2 <- df1 %>% group_by(seqnames,start,end,width,strand) %>% 
+    summarise(prob = max(denovo),
+              coverage = n())
+  df2 <- as.data.frame(df2)
+  denovo_atoi <- GRanges(seqnames = df2$seqnames,
+                         IRanges(start = df2$start,end = df2$end),
+                         strand = df2$strand,
+                         prob = df2$prob,coverage=df2$coverage)
+  denovo_atoi <- denovo_atoi[denovo_atoi$coverage>30]
+  atoi_overlaps <- findOverlaps(atoi,denovo_atoi)
+  
+  df1 <- as.data.frame(denovo[denovo%over%hm5c])
+  df2 <- df1 %>% group_by(seqnames,start,end,width,strand) %>% 
+    summarise(prob = max(denovo),
+              coverage = n())
+  df2 <- as.data.frame(df2)
+  denovo_hm5c <- GRanges(seqnames = df2$seqnames,
+                         IRanges(start = df2$start,end = df2$end),
+                         strand = df2$strand,
+                         prob = df2$prob,coverage=df2$coverage)
+  denovo_hm5c <- denovo_hm5c[denovo_hm5c$coverage>30]
+  hm5c_overlaps <- findOverlaps(hm5c,denovo_hm5c)
+  
+  df3 <- data.frame(type = c(rep("atoi",length(atoi_overlaps)),
+                             rep("hm5c",length(hm5c_overlaps))),
+                    prob = c(denovo_atoi[subjectHits(atoi_overlaps)]$prob,
+                             denovo_hm5c[subjectHits(hm5c_overlaps)]$prob))
+  df3$prob <- df3$prob>=0.5
+  df3$rep <- paste("rep",r,sep = "")
+  
+  df4 <- rbind(df4,df3)
+}
+```
+```{r}
+df4$prob <- ifelse(df4$prob==TRUE,1,0)
+df5 <- df4 %>% group_by(type,rep) %>% 
+  summarise(success_rate = sum(prob)/n()) %>% as.data.frame()
+```
+```{r}
+p_bar <- ggplot(df5,aes(x = type, fill = rep, y= 100*success_rate)) +
+  geom_col(position = "dodge",width = 0.6) +
+  geom_text(aes(label = percent(success_rate)),
+            position = position_dodge(0.8),  
+            size = 5, 
+            vjust = -0.5,size.unit = "pt") + 
+  scale_fill_manual(values = c("#a8cae8","#faee85")) +
+  theme_bw(base_size = 7) + theme(panel.background = element_blank(),panel.grid = element_blank(),legend.position = "None") +
+  ylab("Successful Rate") + ylim(0,100)
+  
+p_bar
+```
+
+## 4c
+```{r}
+types <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+df2 <- data.frame()
+for(r in 1:2){
+  dir <- paste("/Users/zhangyuxin/Desktop/review/data/MT4-",r,"/review_results/ml5/",sep = "")
+  atoi_df <- data.frame()
+  hm5c_df <- data.frame()
+  for(i in 1:6){
+    ont <- read.csv(paste(dir,"/",types[i],".csv",sep = ""))
+    ont <- GRanges(seqnames = ont$seqnames,
+                   IRanges(start = ont$pos,width = 1),
+                   strand = ont$strand,
+                   prob = ont$max_prob)
+    overlaps <- findOverlaps(atoi,ont)
+    tmp <- data.frame(type = types[i],
+                      prob = ont[subjectHits(overlaps)]$prob)
+    atoi_df <- rbind(atoi_df,tmp)
+    
+    overlaps <- findOverlaps(hm5c,ont)
+    tmp <- data.frame(type = types[i],
+                      prob = ont[subjectHits(overlaps)]$prob)
+    hm5c_df <- rbind(hm5c_df,tmp)
+  }
+  atoi_df$class <- "atoi"
+  hm5c_df$class <- "hm5c"
+  df <- rbind(atoi_df,hm5c_df)
+  
+  df$rep <- paste("rep",r,sep = "")
+  df <- df[sample(1:nrow(df),1000),]
+  
+  df2 <- rbind(df2,df)
+}
+
+```
+
+```{r}
+p_box <- ggplot(df2) +
+  geom_boxplot(aes(x = type, y = prob,fill = rep,alpha = 0.5, color=rep),outlier.size = 0.1,width = 0.6) + 
+  facet_wrap(~df2$class,ncol = 1) + theme_bw(base_size = 7) + theme(panel.grid = element_blank(),
+                                                                    axis.title.x = element_blank(),
+                                                                    legend.position = "None") +
+  scale_fill_manual(values = c("#a8cae8","#faee85")) +
+  scale_color_manual(values = c("#a8cae8","#faee85")) + ylab("Probability") + ylim(0,1)
+p_box
+```
+
+
+## 4d
+```{r}
+gtf_file <- ExtractGTFFile("/Users/zhangyuxin/Desktop/figure_data/Homo_sapiens.GRCh38.111.gtf")
+```
+```{r}
+csv2gr <- function(csv_dir){
+  csv <- read.csv(csv_dir)
+  gr <- GRanges(seqnames = csv$chr,
+                IRanges(start = csv$chromStart, end = csv$chromEnd),
+                strand = csv$strand)
+  return(gr)
+}
+
+df2gr <- function(df_dir){
+  df <- read.csv(df_dir)
+  gr <- GRanges(seqnames = df$seqnames,
+                IRanges(start = df$start, end = df$end),
+                strand = df$strand)
+  return(gr)
+}
+peak <- 500
+NGS <- "/Users/zhangyuxin/Desktop/figure_data/NGS/MT4"
+
+ac4c_peak <- csv2gr(paste(NGS,'/hg38_control_ac4C/Mod.csv', sep = ''))
+ac4c_peak <- ac4c_peak[width(ac4c_peak)<peak]
+ac4c <- df2gr(paste(NGS,'/processed/ac4c.csv', sep = ''))
+ac4c <- ac4c[ac4c%over%ac4c_peak]
+
+m1a_peak <- csv2gr(paste(NGS,'/hg38_control_m1A/Mod.csv', sep = ''))
+m1a_peak <- m1a_peak[width(m1a_peak)<peak]
+m1a <- df2gr(paste(NGS,'/processed/m1a.csv', sep = ''))
+m1a <- m1a[m1a%over%m1a_peak]
+
+m5c_peak <- csv2gr(paste(NGS,'/hg38_control_m5C/Mod.csv', sep = ''))
+m5c_peak <- m5c_peak[width(m5c_peak)<peak]
+m5c <- df2gr(paste(NGS,'/processed/m5c_new.csv', sep = ''))
+m5c <- m5c[m5c%over%m5c_peak]
+
+m6a_peak <- csv2gr(paste(NGS,'/hg38_control_m6A/Mod.csv', sep = ''))
+m6a_peak <- m6a_peak[width(m6a_peak)<peak]
+m6a <- df2gr(paste(NGS,'/processed/m6a.csv', sep = ''))
+m6a <- m6a[m6a%over%m6a_peak]
+
+m7g_peak <- csv2gr(paste(NGS,'/hg38_control_m7G/Mod.csv', sep = ''))
+m7g_peak <- m7g_peak[width(m7g_peak)<peak]
+m7g <- df2gr(paste(NGS,'/processed/m7g.csv', sep = ''))
+m7g <- m7g[m7g%over%m7g_peak]
+
+psi_peak <- csv2gr(paste(NGS,'/MACS2_MT4/Mod.csv', sep = ''))
+psi_peak <- psi_peak[width(psi_peak)<peak]
+psi <- df2gr(paste(NGS,'/processed/psi.csv', sep = ''))
+psi <- psi[psi%over%psi_peak]
+total_ngs_site <- c(ac4c,m1a,m5c,m6a,m7g,psi)
+total_ngs_peak <- c(ac4c_peak,m1a_peak,m5c_peak,m6a_peak,m7g_peak,psi_peak)
+```
+
+```{r}
+types <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+total_ont <- GRanges()
+df2 <- data.frame()
+for(r in 1:2){
+  for(type in types){
+    gr_ont <- read.csv(paste("/Users/zhangyuxin/Desktop/review/data/MT4-",r,"/review_results/ml5/",type,".csv",sep = ""))
+    gr_ont <- GRanges(seqnames = gr_ont$seqnames,
+                      IRanges(start = gr_ont$pos,width = 1),
+                      strand = gr_ont$strand,
+                      prob = gr_ont$max_prob,
+                      mod_count = gr_ont$count,
+                      coverage = gr_ont$coverage,
+                      mod_rate = gr_ont$count/gr_ont$coverage)
+    gr_ont <- gr_ont[gr_ont$coverage>=10]
+    gr4anno <- GRanges(seqnames = gsub("chr","",seqnames(gr_ont)),
+                       IRanges(start = start(gr_ont),width = 1),
+                       strand = strand(gr_ont))
+    gr4anno <- rmAnno(gr4anno,gtf_file)
+    gr_ont <- gr_ont[grepl("protein_coding",gr4anno$Bio_type)]
+    assign(paste(type,"ont",sep = "_"),gr_ont)
+    total_ont <- c(total_ont,gr_ont)
+  }
+  
+  identified <- c()
+  validated <- c()
+  for(type in types){
+    ngs_site <- get(type)
+    ngs_peak <- get(paste(type,"_peak",sep = ""))
+    gr4anno <- GRanges(seqnames = gsub("chr","",seqnames(ngs_peak)),
+                       IRanges(start = start(ngs_peak),width = 1),
+                       strand = strand(ngs_peak))
+    gr4anno <- rmAnno(gr4anno,gtf_file)
+    ngs_peak <- ngs_peak[grepl("protein_coding",gr4anno$Bio_type)]
+    
+    ont_site <- get(paste(type,"_ont",sep = ""))
+    ngs_site <- ngs_site[ngs_site%over%ont_site]
+    ngs_peak <- ngs_peak[ngs_peak%over%ont_site]
+    
+    overlaps <- findOverlaps(ngs_peak,ont_site[ont_site$mod_count>0])
+    print(type)
+    print(length(unique(queryHits(overlaps)))/queryLength(overlaps))
+    identified <- c(identified,length(unique(queryHits(overlaps)))/queryLength(overlaps))
+    print(length(unique(subjectHits(overlaps)))/subjectLength(overlaps))
+    validated <- c(validated,length(unique(subjectHits(overlaps)))/subjectLength(overlaps))
+    
+    overlaps <- findOverlaps(ngs_site,ont_site[ont_site$mod_count>0])
+    print(length(unique(queryHits(overlaps)))/queryLength(overlaps))
+    print(length(unique(subjectHits(overlaps)))/subjectLength(overlaps))
+  }
+  df <- data.frame(identified = identified,
+                   validated = validated,
+                   type = types)
+  df$rep <- paste("rep",r)
+  df2 <- rbind(df2,df)
+}
+# 
+```
+
+```{r}
+p_bar2 <- ggplot(df2) +
+  geom_col(aes(x = type,y= validated,fill = rep,colro = rep),
+           width = 0.5,position="dodge") +
+  theme_bw(base_size = 7) + theme(panel.grid = element_blank()) +
+  scale_fill_manual(values = c("#a8cae8","#faee85")) + 
+  scale_color_manual(values = c("#a8cae8","#faee85"))+ylab("NGS validated")
+p_bar2
+```
+
+## 4e
+### rep 1
+```{r}
+types <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+total_ont <- GRanges()
+for(type in types){
+  gr_ont <- read.csv(paste("/Users/zhangyuxin/Desktop/review/data/MT4-1/review_results/ml5/",type,".csv",sep = ""))
+  gr_ont <- GRanges(seqnames = gr_ont$seqnames,
+                    IRanges(start = gr_ont$pos,width = 1),
+                    strand = gr_ont$strand,
+                    prob = gr_ont$max_prob,
+                    mod_count = gr_ont$count,
+                    coverage = gr_ont$coverage,
+                    mod_rate = gr_ont$count/gr_ont$coverage)
+  gr_ont <- gr_ont[gr_ont$coverage>10]
+  gr4anno <- GRanges(seqnames = gsub("chr","",seqnames(gr_ont)),
+              IRanges(start = start(gr_ont),width = 1),
+              strand = strand(gr_ont))
+  gr4anno <- rmAnno(gr4anno,gtf_file)
+  gr_ont <- gr_ont[-which(grepl("protein_coding",gr4anno$Bio_type))]
+  assign(paste(type,"ont",sep = "_"),gr_ont)
+  total_ont <- c(total_ont,gr_ont)
+}
+
+total_ont_mod <- total_ont[total_ont$mod_count>0]
+gr <- GRanges(seqnames = gsub("chr","",seqnames(total_ont_mod)),
+              IRanges(start = start(total_ont_mod),width = 1),
+              strand = strand(total_ont_mod))
+gr <- rmAnno(gr,gtf_file)
+nc_mod <- total_ont_mod
+RNA_type <-unique(unlist(strsplit(gr$Bio_type,"/")))
+df <- data.frame()
+for(type in types){
+  ont_gr <- get(paste(type,"_ont",sep = ""))
+  ont_gr <- ont_gr[ont_gr$mod_count>0]
+  gr <- GRanges(seqnames = gsub("chr","",seqnames(ont_gr)),
+              IRanges(start = start(ont_gr),width = 1),
+              strand = strand(ont_gr))
+  gr <- rmAnno(gr,gtf_file)
+  tmp <- data.frame(rna_type = unlist(strsplit(gr$Bio_type,"/")),
+                    mod_type = type)
+  df <- rbind(df,tmp)
+}
+
+df[which(grepl("pseudogene",df$rna_type)),]$rna_type <- "pseudogene"
+df <- na.omit(df)
+```
+rRNA
+```{r}
+types <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+total_ont <- GRanges()
+for(type in types){
+  gr_ont <- read.csv(paste("/Users/zhangyuxin/Desktop/review/data/MT4-1/review_results/rRNA/ml5/",type,".csv",sep = ""))
+  gr_ont <- GRanges(seqnames = gr_ont$seqnames,
+                    IRanges(start = gr_ont$pos,width = 1),
+                    strand = gr_ont$strand,
+                    prob = gr_ont$max_prob,
+                    mod_count = gr_ont$count,
+                    coverage = gr_ont$coverage,
+                    mod_rate = gr_ont$count/gr_ont$coverage)
+  gr_ont <- gr_ont[gr_ont$coverage>10]
+  gr_ont <- gr_ont[gr_ont$mod_count>=1]
+  gr_ont$rna_type <- "rRNA"
+  gr_ont$mod_type <- type
+  total_ont <- c(total_ont,gr_ont)
+}
+df2 <- data.frame(rna_type = total_ont$rna_type,
+                  mod_type = total_ont$mod_type)
+df <- rbind(df,df2)
+```
+```{r}
+tab <- as.data.frame(table(df$rna_type))
+cls <- tab[tab$Freq<100,]$Var1
+df$label <- df$rna_type
+df[df$rna_type%in%cls,]$label <- "others"
+df$label <- factor(df$label,levels = c("pseudogene","lncRNA","rRNA","others"))
+```
+
+```{r}
+# colnames(df) <- c("rna_type","mod_type","label")
+# 
+df2 <- as.data.frame(table(df$label))
+colnames(df2) <- c("categories","freq")
+df2$percentage <- df2$freq/sum(df2$freq)
+df2$label <- percent(df2$percentage)
+df2$position <- cumsum(df2$percentage) - df2$percentage/2
+
+p1 <- ggplot(df2) +
+  geom_col(aes(x = "", y = percentage,fill = categories),width = 1,color = "white",linewidth=0.5) +
+  coord_polar(theta = "y",start = 0) +
+  theme_void() + theme(legend.position = "left") +
+  scale_fill_manual(values = c("#fbb46f","#f58383","#a8cae8","#faee85")) +
+  geom_text(aes(x = "",y = position, label = label),
+            color = "white",
+            size = 4,
+            fontface = "bold",
+            check_overlap = FALSE)
+p1
+```
+
+## 4f
+```{r}
+types <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+ad_total <- GRanges()
+mt1_total <- GRanges()
+mt2_total <- GRanges()
+
+for(type in types){
+  ad_gr <- read.csv(paste("/Users/zhangyuxin/Desktop/review/data/AD004/ml5/",type,".csv",sep = ""))
+  ad_gr <- GRanges(seqnames = ad_gr$seqnames,
+                   IRanges(start = ad_gr$pos,width = 1),
+                   strand = ad_gr$strand,
+                   prob = ad_gr$max_prob,
+                   mod_count = ad_gr$count,
+                   coverage = ad_gr$coverage,
+                   mod_rate = ad_gr$count/ad_gr$coverage,
+                   type = type)
+  assign(paste("ad",type,sep = "_"),ad_gr)
+  ad_total <- c(ad_total,ad_gr)
+  
+  mt1_gr <- read.csv(paste("/Users/zhangyuxin/Desktop/review/data/MT4-1/review_results/ml5/",type,".csv",sep = ""))
+  mt1_gr <- GRanges(seqnames = mt1_gr$seqnames,
+                   IRanges(start = mt1_gr$pos,width = 1),
+                   strand = mt1_gr$strand,
+                   prob = mt1_gr$max_prob,
+                   mod_count = mt1_gr$count,
+                   coverage = mt1_gr$coverage,
+                   mod_rate = mt1_gr$count/mt1_gr$coverage,
+                   type = type)
+  assign(paste("mt1",type,sep = "_"),mt1_gr)
+  mt1_total <- c(mt1_total,mt1_gr)
+  
+  mt2_gr <- read.csv(paste("/Users/zhangyuxin/Desktop/review/data/MT4-2/review_results/ml5/",type,".csv",sep = ""))
+  mt2_gr <- GRanges(seqnames = mt2_gr$seqnames,
+                   IRanges(start = mt2_gr$pos,width = 1),
+                   strand = mt2_gr$strand,
+                   prob = mt2_gr$max_prob,
+                   mod_count = mt2_gr$count,
+                   coverage = mt2_gr$coverage,
+                   mod_rate = mt2_gr$count/mt2_gr$coverage,
+                   type = type)
+  assign(paste("mt2",type,sep = "_"),mt2_gr)
+  mt2_total <- c(mt2_total,mt2_gr)
+}
+
+ad_total <- ad_total[ad_total$mod_count>=1&ad_total$coverage>=10]
+mt1_total <- mt1_total[mt1_total$mod_count>=1&mt1_total$coverage>=10]
+mt2_total <- mt2_total[mt2_total$mod_count>=1&mt2_total$coverage>=10]
+
+gr <- c(ad_total,mt1_total,mt2_total)
+mcols(gr) <- NULL
+gr <- unique(gr)
+gr$ad <- 0
+gr[gr%over%ad_total]$ad <- 1
+gr$mt1 <- 0
+gr[gr%over%mt1_total]$mt1 <- 1
+gr$mt2 <- 0
+gr[gr%over%mt2_total]$mt2 <- 1
+df <- as.data.frame(mcols(gr))
+df$ad <- ifelse(df$ad==1,1,0)
+df$mt1 <- ifelse(df$mt1==1,1,0)
+df$mt2 <- ifelse(df$mt2==1,1,0)
+```
+```{r}
+pdf("/Users/zhangyuxin/Desktop/final_review/figure4/4f.pdf",
+    width = 3,height = 2)
+upset(df,nsets = 3,order.by = "freq",
+      main.bar.color = "#f58383",
+      matrix.color = "#a8cae8", 
+      sets.bar.color = "#a8cae8",text.scale = 0.9,
+      point.size = 0.9,line.size = 0.5,)
+dev.off()
+```
+
+## 4g
+### (2)
+```{r}
+mt1_total <- mt1_total[mt1_total%over%total_ngs_site]
+mt2_total <- mt2_total[mt2_total%over%total_ngs_site]
+
+overlaps <- findOverlaps(mt1_total,mt2_total)
+rate_df <- data_frame(rep1 = mt1_total[queryHits(overlaps)]$mod_rate,
+                      rep2 = mt2_total[subjectHits(overlaps)]$mod_rate,
+                      type = mt1_total[queryHits(overlaps)]$type)
+
+rate_df <- rate_df[sample(1:nrow(rate_df),1000),]
+rate_df$fold <- rate_df$rep2/rate_df$rep1
+rate_df$color <- ifelse(rate_df$fold > 1/3 & rate_df$fold < 3,0,1)
+
+p_point <- ggplot(rate_df) +
+  geom_point(aes(x = rep1,y = rep2,color = factor(color)),size = 0.3) +
+  geom_smooth(aes(x = rep1,y = rep2),color = "black",linetype = "dashed",method = "lm",linewidth = 0.5) +
+  theme_bw(base_size = 7) + theme(panel.grid = element_blank(),aspect.ratio = 1) +
+  geom_text(x = 0.75, y = 0.25,
+            label = paste("rep2 = ",round(coef(lm(rate_df$rep2~rate_df$rep1))[1],2),
+                          "+",round(coef(lm(rate_df$rep2~rate_df$rep1))[2],2),"rep1"),
+            size = 2) + scale_color_manual(values = c("#a8cae8","#f58383"))
+p_point
+```
+
+### (1)
+```{r}
+mt1_total <- mt1_total[mt1_total%over%total_ngs_site]
+ad_total <- ad_total[ad_total%over%total_ngs_site]
+
+overlaps <- findOverlaps(mt1_total,ad_total)
+rate_df <- data_frame(rep1 = mt1_total[queryHits(overlaps)]$mod_rate,
+                      rep2 = ad_total[subjectHits(overlaps)]$mod_rate,
+                      type = mt1_total[queryHits(overlaps)]$type)
+
+rate_df <- rate_df[sample(1:nrow(rate_df),1000),]
+rate_df$fold <- rate_df$rep2/rate_df$rep1
+rate_df$color <- ifelse(rate_df$fold > 1/3 & rate_df$fold < 3,0,1)
+
+p_point <- ggplot(rate_df) +
+  geom_point(aes(x = rep1,y = rep2,color = factor(color)),size = 0.3) +
+  geom_smooth(aes(x = rep1,y = rep2),color = "black",linetype = "dashed",method = "lm",
+              linewidth = 0.5) +
+  theme_bw(base_size = 7) + theme(panel.grid = element_blank(),aspect.ratio = 1) +
+  geom_text(x = 0.75, y = 0.25,
+            label = paste("HepAD38 = ",round(coef(lm(rate_df$rep2~rate_df$rep1))[1],2),
+                          "+",round(coef(lm(rate_df$rep2~rate_df$rep1))[2],2),"MT-4"),
+            size = 2) + scale_color_manual(values = c("#a8cae8","#f58383"))
+p_point
+```
+
+# Figure 5
+## 5a
+```{r}
+# AtoI and hm5c for HTLV
+df1 <- read.csv("/Users/zhangyuxin/Desktop/DirectMultiRM/NGS/htlv-1/HTLV_AtoI/HTLV_m6A_con1/denovo_780424765/outTable_780424765",sep = "\t")
+df2 <- read.csv("/Users/zhangyuxin/Desktop/DirectMultiRM/NGS/htlv-1/HTLV_AtoI/HTLV_m6A_con2/denovo_206789762/outTable_206789762",sep = "\t")
+df3 <- read.csv("/Users/zhangyuxin/Desktop/DirectMultiRM/NGS/htlv-1/HTLV_AtoI/HTLV_m6A_con3/denovo_155421074/outTable_155421074",sep = "\t")
+df <- rbind(df1,df2,df3)
+df <- df %>% filter(Frequency>0,Pvalue<0.05,Reference%in%c("A","T"))
+df$strand <- "+"
+df[df$Reference=="T",]$strand <- "-"
+
+atoi <- GRanges(seqnames = df$Region,
+              IRanges(start = df$Position,width = 1),
+              strand = df$strand)
+atoi <- unique(atoi)
+
+hm5c <- read.csv("/Users/zhangyuxin/Desktop/DirectMultiRM/NGS/htlv-1/htlv_hm5C/hisat_htlv_hm5C/exomePeak_output/peak.bed",sep = "\t")
+hm5c <- GRanges(seqnames = hm5c$X..chr,
+                IRanges(hm5c$chromStart,end = hm5c$chromEnd),
+                strand = hm5c$strand)
+ngs_denovo <- c(atoi,hm5c)
+```
+```{r}
+df2 <- data.frame()
+for(r in 1:2){
+  types <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+  dir <- paste("/Users/zhangyuxin/Desktop/review/data/HTLV-",r,"/review_results/ml5/",sep = "")
+  atoi_df <- data.frame()
+  hm5c_df <- data.frame()
+  for(i in 1:6){
+    ont <- read.csv(paste(dir,"/",types[i],".csv",sep = ""))
+    ont <- GRanges(seqnames = ont$seqnames,
+                   IRanges(start = ont$pos,width = 1),
+                   strand = ont$strand,
+                   prob = ont$max_prob)
+    overlaps <- findOverlaps(atoi+9,ont)
+    tmp <- data.frame(type = types[i],
+                      prob = ont[subjectHits(overlaps)]$prob)
+    atoi_df <- rbind(atoi_df,tmp)
+    
+    overlaps <- findOverlaps(hm5c,ont)
+    tmp <- data.frame(type = types[i],
+                      prob = ont[subjectHits(overlaps)]$prob)
+    hm5c_df <- rbind(hm5c_df,tmp)
+  }
+  atoi_df$class <- "atoi"
+  hm5c_df$class <- "hm5c"
+  df <- rbind(atoi_df,hm5c_df)
+  df$rep <- paste("rep",r,sep = "")
+  
+  df2 <- rbind(df2,df)
+}
+
+```
+```{r}
+p_box <- ggplot(df2) +
+  geom_boxplot(aes(x = type, y = prob,fill = rep,alpha = 0.5, color=rep),outlier.size = 0.1,width = 0.6) + 
+  facet_wrap(~df2$class,ncol = 1) + theme_bw(base_size = 7) + theme(panel.grid = element_blank(),
+                                                                    legend.position = "bottom") +
+  scale_fill_manual(values = c("#a8cae8","#faee85")) +
+  scale_color_manual(values = c("#a8cae8","#faee85")) + ylab("Probability")
+p_box
+```
+
+## 5b
+```{r}
+bed2gr <- function(bed_dir){
+  bed <- read.csv(bed_dir,sep = "\t")
+  gr <- GRanges(seqnames = bed$X..chr,
+                IRanges(start = bed$chromStart,end = bed$chromEnd),
+                strand = bed$strand)
+  return(gr)
+}
+NGS <- "/Users/zhangyuxin/Desktop/figure_data/NGS/htlv-1"
+ac4c_hisat <- bed2gr(paste(NGS,"/hisat_ac4C/exomePeak_output/peak.bed",sep = ""))
+m5c_hisat <- bed2gr(paste(NGS,"/Hisat_m5C/exomePeak_output/peak.bed",sep = ""))
+m6a_hisat <- bed2gr(paste(NGS,"/Hisat_m6A/exomePeak_output/peak.bed",sep = ""))
+m7g_hisat <- bed2gr(paste(NGS,"/Hisat_m7G/exomePeak_output/peak.bed",sep = ""))
+m1a_hisat <- bed2gr(paste(NGS,"/Hisat_m1A/exomePeak_output/peak.bed",sep = ""))
+psi <- read.csv(paste(NGS,"/MACS2_HTLV_psi/Mod.csv",sep = ""))
+psi_hisat <- GRanges(seqnames = psi$chr,
+               IRanges(start = psi$start,end = psi$end),
+               strand = "+")
+ac4c_bowtie <- bed2gr(paste(NGS,"/hisat_ac4C/exomePeak_output/peak.bed",sep = ""))
+m5c_bowtie <- bed2gr(paste(NGS,"/Bowtie_m5C/exomePeak_output/peak.bed",sep = ""))
+m6a_bowtie <- bed2gr(paste(NGS,"/bowtie_m6A/exomePeak_output/peak.bed",sep = ""))
+m7g_bowtie <- bed2gr(paste(NGS,"/bowtie_m7G/exomePeak_output/peak.bed",sep = ""))
+m1a_bowtie <- bed2gr(paste(NGS,"/Bowtie_m1A/exomePeak_output/peak.bed",sep = ""))
+psi <- read.csv(paste(NGS,"/MACS2_HTLV_psi/Mod.csv",sep = ""))
+psi_bowtie <- GRanges(seqnames = psi$chr,
+               IRanges(start = psi$start,end = psi$end),
+               strand = "+")
+```
+```{r}
+types <- c("ac4c","m1a","m5c","m6a","m7g","psi")
+df2 <- data.frame()
+for(r in 1:2){
+  for(type in types){
+    rep1 <- read.csv(paste("/Users/zhangyuxin/Desktop/review/data/HTLV-",r,"/review_results/ml5/",type,".csv",sep = ""))
+    rep1 <- GRanges(seqnames = rep1$seqnames,
+                    IRanges(start = rep1$pos,width = 1),
+                    strand = rep1$strand,
+                    prob = rep1$max_prob,
+                    mod_count = rep1$count,
+                    coverage = rep1$coverage)
+    rep1$mod_rate <- rep1$mod_count/rep1$coverage
+    rep1 <- rep1[rep1$coverage>=10]
+    assign(paste(type,"_ont",sep = ""),rep1)
+  }  
+  identified <- c()
+  validated <- c()
+  for(type in types){
+    ngs_peak <- get(paste(type,"_bowtie",sep = ""))
+    ont_site <- get(paste(type,"_ont",sep = ""))
+    ngs_peak <- ngs_peak[ngs_peak%over%ont_site]
+    
+    overlaps <- findOverlaps(ngs_peak,ont_site[ont_site$mod_count>0])
+    print(type)
+    print(length(unique(queryHits(overlaps)))/queryLength(overlaps))
+    identified <- c(identified,length(unique(queryHits(overlaps)))/queryLength(overlaps))
+    print(length(unique(subjectHits(overlaps)))/subjectLength(overlaps))
+    validated <- c(validated,length(unique(subjectHits(overlaps)))/subjectLength(overlaps))
+  }
+  df <- data.frame(identified = identified,
+                   validated = validated,
+                   type = types)
+  df$rep <- paste("rep",r,sep = "")
+  df2 <- rbind(df2,df)
+}
+```
+```{r}
+p_bar2 <- ggplot(df2) +
+  geom_col(aes(x = type,y= validated,fill = rep,colro = rep),
+           width = 0.5,position="dodge") +
+  theme_bw(base_size = 7) + theme(panel.grid = element_blank(),
+                                  legend.position = "bottom") +
+  scale_fill_manual(values = c("#a8cae8","#faee85")) 
+ 
+p_bar2
+```
+
