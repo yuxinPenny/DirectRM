@@ -344,5 +344,7 @@ Site-level results for each modification class
 
 We appreciate your feedback and questions. You can report an error or suggestions related to DirectRM as an issue on github.
 
+## 5 License 
+DirectRM is licensed under the terms of the MIT license.
 
 
