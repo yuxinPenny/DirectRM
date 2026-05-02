@@ -38,16 +38,6 @@ All processes related to DirectRM were tested on
 - Python3
 - Basic python packages: `math`, `os`, `re`, `sys`, `csv`, `json`, `argparse`, `tqdm`, `numpy`, `pandas`, `random`
 
-We also provide the Conda environment.yml files (remora-env.yml to run remora for feature extraction, and DirectRM.yml for other steps) to ensure the reproducibility of the required environments.
-
-### Installation
-
-It may take several minutes to install
-
-```bash
-git clone https://github.com/yuxinPenny/DirectRM
-```
-
 ### Input data
 
 - ##### Raw data in Pod5 format
@@ -63,7 +53,7 @@ git clone https://github.com/yuxinPenny/DirectRM
 - ##### Target regions
 
   Please provide a **CSV** file of regions you want analyze. The table should contain following columns, and each line represents one region. The coordinates should be consistent to above reference file.
-
+  
   | seqnames | start | end  | width | strand |
   | -------- | ----- | ---- | ----- | ------ |
   | chr1     | 207   | 307  | 101   | +      |
@@ -75,59 +65,49 @@ git clone https://github.com/yuxinPenny/DirectRM
 
 **Dorado** is used to perform base calling and alignment simultaneously. 
 
-To optimize the memory usage, we split the total Pod5 directory into multiple parallel batches and perform base calling as several independent and parallel tasks. We prepared a script called `preprocessing.py`, which will: 
+To optimize the memory usage, we process each `POD5` file as an independent split-parallel unit for both base calling and feature extraction. The script below will rearch the target directory for `.pod5` files, and for each `.pod5` file:
+1) Perform base calling and alignment.
+2) Compress, sort, and index the alignment file. 
+3) Delete the intermediate SAM files to save space.
 
-1) Split the original Pod5 folder into multiple folders, and each contain 20 Pod5 files (denoted as **splitN**). 
-2) Perform base calling and alignment for each split
-3) Compress, sort, and index the alignment file. 
-4) Delete the intermediate SAM files to save space.
-
-This step may take 2-3 minutes for single pod5 file with GPU device.
+Each input `.pod5` file produces a corresponding `_sorted.bam` file with the same base name.
 
 ```bash
-python3 ./DirectRM/scripts/preprocessing.py \
--i <pod5_dir> \
---new_dir <new_pod5_dir> \
--o <bam_dir> \
---dorado <path to dorado software> \
---ref <reference file> \
---model <path to base calling model> \
---device <device>
+POD5_DIR="./pod5"
+BAM_DIR="./bam"
+REF="./reference.fa"
+DEVICE="cuda:0"
+
+mkdir -p ${BAM_DIR}
+for pod5_fl in ${POD5_DIR}/*.pod5; do
+  
+    base_name=$(basename ${pod5_fl} .pod5)
+    bam_fl=${BAM_DIR}/${base_name}.bam
+
+    ./dorado-0.6.2-linux-x64/bin/dorado basecaller \
+    ./dorado-0.6.2-linux-x64/model/rna004_130bps_hac@v3.0.1 \
+    ${pod5_fl} --emit-sam --emit-moves \
+    --reference ${REF} \
+    --device ${DEVICE} > ${BAM_DIR}/${base_name}.sam
+
+    samtools view -b -S ${BAM_DIR}/${base_name}.sam > ${BAM_DIR}/${base_name}.bam
+
+    samtools sort ${BAM_DIR}/${base_name}.bam > \
+    ${BAM_DIR}/${base_name}_sorted.bam
+
+    samtools index ${BAM_DIR}/${base_name}_sorted.bam
+
+    rm -rf ${BAM_DIR}/${base_name}.sam
+    rm -rf ${BAM_DIR}/${base_name}.bam
+done
 ```
 
-#### Parameter explaination
-
-- `-i`:  the original pod5 folder
-
-- `--new_dir`: the script will randomly move 20 Pod4 files to a new folder (named as **splitN**) under <new_pod5_dir> folder. 
-
-- `-o`: output directory for the base calling and alignment results
-
-- `--ref`: reference.fa
-
-- `--dorado`: path to the dorado package. For example, `./software/dorado-0.6.2-linux-x64/bin/dorado`
-
-- `--model`: path to the dorado model used for base calling. 
-  Please download available Dorado models with: 
-
-  ```
-  dorado download --model all
-  ```
-
-  - `rna002_70bps_hac@v3` for data sequenced with SQK-RNA002 kit,
-  - `rna004_130bps_hac@v3.0.1` for data sequenced with SQK-RNA004 kit.
-
-- `--device`: device id. For example, `cuda:0`, `cuda:all`
-
-#### Output
-
-1. Organized new_pod5_dir
-
-![Figure1](pics/Figure1.png)
-
-2. Bam files
-
-![Figure2](pics/Figure2.png)
+Please download available Dorado models with: 
+```
+dorado download --model all
+```
+- `rna002_70bps_hac@v3` for data sequenced with SQK-RNA002 kit,
+- `rna004_130bps_hac@v3.0.1` for data sequenced with SQK-RNA004 kit.
 
 ### 3.2 Feature extraction
 
@@ -139,35 +119,56 @@ python3 ./DirectRM/scripts/preprocessing.py \
 
 **Note**: To use remora, we recommend to create an independent conda environment with **python=3.9** for it.
 
-This step may take 30 minutes for 20 pod5 files.
-
+#### Read sampling
+To reduce unnecessary computation, users can specify a minimum and maximum coverage threshold for each region and then perform read sampling.
 ```bash
+BAM_dir="./bam"
+REG="./reg.csv"
+READs="./sampled_reads.txt"
+
+bam_fls=(${BAM_dir}/*.bam)
+tmp=(${bam_fls[@]##*/})
+split_array=(${tmp[@]%.bam})
+
+python3 ./DirectRM/scripts/sampling.py \
+--bam ${BAM_dir} \
+--reg ${REG}\
+-o ${READs} \
+--splits ${split_array[@]} \
+--min_coverage 30 \
+--max_coverage 150
+```
+#### Feature extraction
+```bash
+POD5_DIR="./pod5"
+BAM_DIR="./bam"
+FEATURE_DIR='./data'
+REG="./reg.csv"
+
+mkdir -p ${FEATURE_DIR}
+
+pod5_fls=(${POD5_DIR}/*.pod5)
+tmp=(${pod5_fls[@]##*/})
+split_array=(${tmp[@]%.pod5})
+
+
 python3 ./DirectRM/scripts/feature_extraction.py \
---pod5_dir <new_pod5_dir> \
---bam <bam_dir> \
---reg <interested_regions> \
---level <kmer_level_tables> \
--o <feature_dir> \
---splits 0 10 \
---kmer 9 --step 5
+--pod5_dir ${POD5_DIR} \
+--bam ${BAM_DIR} \
+--reg ${REG} \
+--level <9mer_levels_v1.txt> \
+-o {FEATURE_DIR} \
+--splits ${splits[@]} \
+--read_ids ${READs} \
+--step 5 --kmer 9
 ```
 
-#### Parameter explaination
-
-- `--pod5_dir`: organized new_pod5_dir
-- `--bam`: path to bam dir
-- `--reg`: regions want to analyze
 - `--level`: the k-mers levels table. `./DirectRM/5mer_levels_v1.txt` for data sequenced with SQK-RNA002 kit, `./DirectRM/9mer_levels_v1.txt` for data sequenced with SQK-RNA004 kit.
-- `-o`: output dir for extracted features
-- `--splits`: ids of  **splits** for feature extraction. We have two ways for specifying the split
-  - provide the start number and end number (two numbers): e.g., `0 10` refers to split0, split1, split2, ..., split10
-  - provide the number of ids: e.g., `0 1 10 20 30` refers to split0, split1, split10, split20 and split30
 - `--step`, `--kmer`: it will extract kmer features with a sliding window. `--kmer` specify the window size [5, 9], `--step` specify the step size of the sliding window.
 
+**Note**: `feature_extraction.py` run in single-thread mode by default. For parallel execution, users can manually split `split_array` into multiple bacthes and submit multiple independent jobs. Each batch is processed separately, which allows flexible scaling according to availble computing resources.
+
 #### Output
-
-![Figure3](pics/Figure3.png)
-
 1. CSV files: coordinates of kmers
 
 | read_id                              | seqnames | start     | end       | width | strand |
@@ -176,61 +177,30 @@ python3 ./DirectRM/scripts/feature_extraction.py \
 | 4377a3e0-895e-4ee4-8eda-872a03e868aa | chr3     | 186788262 | 186788271 | 9     | +      |
 
 2. npz files: features of kmers
-   1. seq: one hot encoded sequence
-   2. stat: mean, median, and etc of signal events
-   3. level: expected kmer levels
-   4. bse: base call errors
-
-#### Optional Uncalled4 resquiggle
-
-DirectRM also maintains the compatibility of using custom resquiggle algorithms, e.g., Uncalled4 (https://github.com/skovaka/uncalled4)
-Uncalled4 resquiggle should be performed after Base calling and before feature extraction
-
-```bash
-N=<NUM_split>
-for ((i=0; i<=N; i++)); do
-
-  echo "analyzing split${i}"
-
-  uncalled4 align \
-  --ref <reference file> \
-  --reads <new_pod5_dir>/split${i} \
-  --bam-in <bam_dir>/split${i}_sorted.bam \
-  --bam-out <bam_dir_new>/split${i}.bam" \
-  -p 10 --kit <kit_name>
-
-  samtools sort <bam_dir>/split${i}.bam \
-  -o <bam_dir>/split${i}_sorted.bam
-
-  samtools index <bam_dir>/split${i}_sorted.bam
-
-done
-
-python3 ./DirectRM/scripts/feature_extraction.py \
---pod5_dir <new_pod5_dir> \
---bam <bam_dir> \
---reg <interested_regions> \
---level <kmer_level_tables> \
--o <feature_dir> \
---splits 0 10 \
---kmer 9 --step 5
---resquiggle False
-
-## --resquiggle False: stop resquiggle with remora
-```
+   - seq: one hot encoded sequence 
+   - stat: mean, median, and etc of signal events 
+   - level: expected kmer levels
+   - bse: base call errors
 
 ### 3.3 De novo modification detection
 
 This step aims to detect modified kmers
 
-This step may take less than one minute for 80000 reads file with GPU device.
-
 ```bash
+FEATURE_DIR='./data'
+OUT_DIR='./output'
+DEVICE="cuda:0"
+
+npz_fls=(${FEATURE_DIR}/*.npz)
+tmp=(${npz_fls[@]##*/})
+split_array=(${tmp[@]%.npz})
+
 python3 ./DirectRM/scripts/denovo_inference.py \
---feature_dir <feature_dir> \
---model_path <denovo_model>\
---splits 0 10 \
---device cuda:0
+--feature_dir ${FEATURE_DIR} \
+--outdir ${OUT_DIR} \
+--model_path <denovo_model> \
+--splits ${split_array[@]} \
+--device ${DEVICE}
 ```
 
 #### Available models
@@ -246,73 +216,52 @@ We provided three binary de novo modification models, each model was trained wit
 - `--model_path`: path to de novo detection model
   - `./DirectRM/model/RNA004/id3_binary/model.pt` for data sequenced with SQK-RNA004 kit
   - `./DirectRM/model/RNA002/id3_binary/model.pt` for data sequenced with SQK-RNA002 kit
-- `--device`: device used for de novo detection
 
 #### Output
-
 npy file speficy the probability of being modified
-
-![Figure4](pics/Figure4.png)
 
 ### 3.4 Modification type and position inference
 
 This step aims to identify the modification type(s) and its(their) position within the modified kmers.
 
-This step may take less than one minute for 80000 reads file with GPU device.
-
 ```bash
-python3 ./DirectRM/scripts/inference.py \
---feature_dir <feature_dir> \
---output_dir <preds_dir> \
---device cuda:0 --splits 0 10 \
---config <path to configuration file> \
---ml True --model_id 1
+FEATURE_DIR='./data'
+OUT_DIR='./output'
+DEVICE="cuda:0"
+
+npz_fls=(${FEATURE_DIR}/*.npz)
+tmp=(${npz_fls[@]##*/})
+split_array=(${tmp[@]%.npz})
+
+python3 /gpfs/work/bio/yuxinzhang17/GlycoRNA/code/inference.py \
+--feature_dir ${FEATURE_DIR} \
+--outdir ${OUT_DIR} \
+--device ${DEVICE} --splits ${split_array[@]} --ml True \
+--model_dir ./DirectRM/model/RNA004 \
+--model_id 5 
 ```
 
 #### Available models
 
-We provided four model artchitecture: 
+We provided four model artchitecture:
 
-- **model1**: {attention} + {fcnn}
-- **model2**: {attention + LSTM} + {fcnn}
-- **model3**: {attention + positional encoding} + {fcnn}
-- **model4**: {attention + positional encoding + LSTM} + {fcnn}
+- model1: {attention} + {fcnn}
+- model2: {attention + LSTM} + {fcnn}
+- model3: {attention + positional encoding} + {fcnn}
+- model4: {attention + positional encoding + LSTM} + {fcnn}
+- model5 **(Recommended)**: {attention} + {biLSTM feature extractor} + {fcnn}
+- model6: {attention} + {biLSTM + CNN feature extractor} + {fcnn}
+- model7: {attention} + {CNN feature extractor} + {fcnn}
+- model8 **(Recommended)**: {attention} + {shared biLSTM feature extractor} + {fcnn}
+  - model8 only support integrated detection mode
 
 #### Parameter explaination
-
-- `--config`: please provide json file `.json` as following, which specify the path to integrated or the six independent models.
-
-```json
-{
-  "model1":{
-    "integrated": "./DirectRM/model/RNA004/ml1/model.pt",
-    "ac4c": "./DirectRM/model/RNA004/ac4c_m1/model.pt",
-    "m1a": "./DirectRM/model/RNA004/m1a_m1/model.pt",
-    "m5c": "./DirectRM/model/RNA004/m5c_m1/model.pt",
-    "m6a": "./DirectRM/model/RNA004/m6a_m1/model.pt",
-    "m7g": "./DirectRM/model/RNA004/m7g_m1/model.pt",
-    "psi": "./DirectRM/model/RNA004/psi_m1/model.pt"
-  },
-  "model2": {
-    "integrated": "./DirectRM/model/RNA004/ml2/model.pt",
-    "ac4c": "./DirectRM/model/RNA004/ac4c_m2/model.pt",
-    "m1a": "./DirectRM/model/RNA004/m1a_m2/model.pt",
-    "m5c": "./DirectRM/model/RNA004/m5c_m2/model.pt",
-    "m6a": "./DirectRM/model/RNA004/m6a_m2/model.pt",
-    "m7g": "./DirectRM/model/RNA004/m7g_m2/model.pt",
-    "psi": "./DirectRM/model/RNA004/psi_m2/model.pt"
-  }
-}
-```
-
 - `--ml`: whether to use integrated detection model (`True`) or independent detection model (`False`)
 - `--model_id`: id of model structure
 
 #### Output
 
 Read level prediction results for each class, grouped by modification type and chromsome/transcripts
-
-![Figure5](pics/Figure5.png)
 
 | read_id                              | seqnames | pos(istion) | strand | ac4c(_probability) |
 | ------------------------------------ | -------- | ----------- | ------ | ------------------ |
@@ -324,16 +273,20 @@ Read level prediction results for each class, grouped by modification type and c
 This step aggregates the read-level results to provide site-level results
 
 ```bash
-python3 ./DirectRM/scripts/read2site.py \
---indir <preds_dir> \
---outdir <preds_dir>
+OUT_DIR='./output'
+
+python3 /gpfs/work/bio/yuxinzhang17/DirectMultiRM/code/v07/read2site.py \
+--indir ${OUT_DIR} \
+--outdir ${OUT_DIR} \
+--delete_read True
 ```
+
+#### Parameter explaination
+- `--delete_read`: whether to delete read-level prediction results (`True`) or not (`False`)
 
 #### Output
 
 Site-level results for each modification class
-
-![Figure6](pics/Figure6.png)
 
 | seqnames | pos(istion) | strand | max_prob   | noisyor_prob | count | coverage |
 | -------- | ----------- | ------ | ---------- | ------------ | ----- | -------- |
@@ -344,7 +297,5 @@ Site-level results for each modification class
 
 We appreciate your feedback and questions. You can report an error or suggestions related to DirectRM as an issue on github.
 
-## 5 License 
-DirectRM is licensed under the terms of the MIT license.
 
 
