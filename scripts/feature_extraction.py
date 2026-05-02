@@ -1,3 +1,7 @@
+from itertools import count
+
+import random
+
 import remora
 from remora import io, refine_signal_map, util
 import pod5
@@ -176,8 +180,12 @@ def iterate_pod5(pod5_dr,bam_fh,read_ids):
             pod5_read = pod5_dr.get_read(read_id)
             bam_read = bam_fh.get_first_alignment(read_id)
             io_read = io.Read.from_pod5_and_alignment(pod5_read,bam_read)
-            io_read.set_refine_signal_mapping(sig_map_refiner,ref_mapping=True)
-            if int(io_read.seq_len) > 500:
+            if FLAGS.resquiggle == True:
+                print('signal refinement by remora')
+                io_read.set_refine_signal_mapping(sig_map_refiner,ref_mapping=True)
+            else:
+                print('no signal refinement by remora')
+            if int(io_read.seq_len) > 0:
                 seq3,stat3,level3,bse3,coord3 = extract_kmer_features(io_read)
                 seq2.extend(seq3)
                 stat2.extend(stat3)
@@ -188,52 +196,34 @@ def iterate_pod5(pod5_dr,bam_fh,read_ids):
                 failed_num += 1
         except Exception as e:
             print(str(e))
-            pass
+            continue
     print(str(failed_num) + " failed")
     return seq2,stat2,level2,bse2,coord2
 
 
 def iterate_split(split):
-    bam_path = FLAGS.bam + "/" + split + "_sorted.bam"
-    bam_fh = io.ReadIndexedBam(bam_path)
 
-    bam_reads = []
-    for i in range(0, len(regs)):
-        try:
-            items = bam_fh.fetch(ctg=regs.loc[i,'seqnames'],
-                                 strand=regs.loc[i,'strand'],
-                                 start=regs.loc[i,'start'], end=regs.loc[i,'end'])
-            for item in items:
-                bam_reads.append(str(item).split('\t')[0])
-        except Exception as e:
-            print(str(e))
-            pass
-    bam_reads = list(set(bam_reads))
+    pod5_path = FLAGS.pod5_dir + '/' + split + ".pod5"
+    pod5_dr = pod5.DatasetReader(pod5_path)
 
-    pod5_dir = FLAGS.pod5_dir + '/' + split
-    fls = []
-    for current_dirs,subdirs,files in os.walk(pod5_dir + '/'):
-        for fl in files:
-            if re.search(r'\.pod5',fl):
-                relative_path = os.path.join(current_dirs,fl)
-                absolute_path = os.path.abspath(relative_path)
-                fls.append(absolute_path.rstrip())
+    pod5_reads = [x for x in pod5_dr.read_ids]
+    if FLAGS.read_ids:
+        read_ids = list(set(pod5_reads).intersection(set(sample_reads)))
+    else:
+        read_ids = pod5_reads
 
-    seq4,stat4,level4,bse4,coord4 = [],[],[],[],[]
-    for fl in tqdm.tqdm(fls):
-        pod5_dr = pod5.DatasetReader(fl)
-        pod5_reads = [x for x in pod5_dr.read_ids]
-        read_ids = list(set(pod5_reads).intersection(set(bam_reads)))
-        seq5,stat5,level5,bse5,coord5 = iterate_pod5(pod5_dr,bam_fh,read_ids)
-        seq4.extend(seq5)
-        stat4.extend(stat5)
-        level4.extend(level5)
-        bse4.extend(bse5)
-        coord4.extend(coord5)
-    np.savez(file = FLAGS.output + "/" + split + ".npz",
-             seq = np.array(seq4),stat = np.array(stat4),level = np.array(level4),bse = np.array(bse4))
-    coord4 = pd.DataFrame(coord4)
-    coord4.to_csv(FLAGS.output +"/" + split + ".csv",index=0)
+    if len(read_ids) > 0:
+        bam_path = FLAGS.bam + "/" + split + "_sorted.bam"
+        bam_fh = io.ReadIndexedBam(bam_path)
+
+        seq4,stat4,level4,bse4,coord4 = iterate_pod5(pod5_dr,bam_fh,read_ids)
+
+        np.savez(file = FLAGS.output + "/" + split + ".npz",
+                 seq = np.array(seq4),stat = np.array(stat4),level = np.array(level4),bse = np.array(bse4))
+        coord4 = pd.DataFrame(coord4)
+        coord4.to_csv(FLAGS.output +"/" + split + ".csv",index=0)
+    else:
+        print("None valid read found in this split")
 
 if __name__ == '__main__':
     paser = argparse.ArgumentParser('extract event signals')
@@ -242,10 +232,11 @@ if __name__ == '__main__':
     paser.add_argument('--reg',required=True,help='csvs for regions of interested')
     paser.add_argument('--level',required=True,help='kmer level tables in txt format')
     paser.add_argument('-o','--output',required=True,help='output directory')
-    paser.add_argument('-t','--threads',default=5,help='number of threads')
     paser.add_argument('--splits',nargs='*',help='splits to process')
     paser.add_argument('--kmer',default=9,help='kmer size')
     paser.add_argument('--step',default=5,help='step size')
+    paser.add_argument('--resquiggle',type = lambda x:(str(x).lower() == 'true'),default=True,help='whether to perform resquiggle with remora')
+    paser.add_argument('--read_ids',required=False,help='output directory')
     args = paser.parse_args(sys.argv[1:])
 
     global FLAGS
@@ -261,22 +252,21 @@ if __name__ == '__main__':
     )
     regs = pd.read_csv(FLAGS.reg)
 
-    if len(FLAGS.splits) > 2:
-        splits = ['split' + str(s) for s in FLAGS.splits]
-        print(splits)
-        for split in tqdm.tqdm(splits):
+    splits = FLAGS.splits
+
+    if FLAGS.read_ids:
+        with open(FLAGS.read_ids,'r') as f:
+            sample_reads = [line.rstrip() for line in f.readlines()]
+
+    for split in splits:
+        try:
             iterate_split(split)
-    elif len(FLAGS.splits) == 2:
-        s1 = int(FLAGS.splits[0])
-        s2 = int(FLAGS.splits[1]) + 1
-        splits = ['split' + str(s) for s in range(s1,s2)]
-        print(splits)
-        for split in tqdm.tqdm(splits):
-            iterate_split(split)
-    elif len(FLAGS.splits) == 1:
-        print(FLAGS.splits[0])
-        iterate_split('split'+FLAGS.splits[0])
-    else:
-        print("please specify correct splits")
+        except Exception as e:
+            print(str(e))
+            continue
+
+
+
+
 
 

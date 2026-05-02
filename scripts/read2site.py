@@ -1,3 +1,5 @@
+from itertools import count
+
 import math, os, re, sys, csv,json
 import argparse
 from tqdm import tqdm
@@ -8,6 +10,7 @@ if __name__ == '__main__':
     paser = argparse.ArgumentParser('pool read results to site level')
     paser.add_argument('--indir',required=True,help='input directory')
     paser.add_argument('--outdir',required=True,help='output directory')
+    paser.add_argument("--delete",type=lambda x:(str(x).lower() == 'true'),default='True')
     args = paser.parse_args(sys.argv[1:])
 
     global FLAGS
@@ -18,6 +21,7 @@ if __name__ == '__main__':
     types = ['m6a','ac4c','m1a','m5c','m7g','psi']
     for type in types:
         chroms = os.listdir(FLAGS.indir+'/'+type)
+        count = 0
         for chorm in tqdm(chroms):
             df = pd.read_csv(FLAGS.indir+'/'+type+'/'+chorm)
             tmp = df.groupby(['seqnames','pos','strand']).agg(
@@ -27,10 +31,20 @@ if __name__ == '__main__':
                 coverage = (type,'count')
             )
             tmp.reset_index(inplace=True)
+            path = FLAGS.outdir+'/'+type+'.csv'
             if len(tmp) > 0:
-                path = FLAGS.outdir+'/'+type+'.csv'
-                if os.path.exists(path):
-                    tmp.to_csv(path,index=False,mode='a',header=False)
+                if count == 0:
+                    tmp.to_csv(path,index=False,mode='w',header=True)
                 else:
-                    tmp.to_csv(path,index=False,mode='a')
+                    tmp.to_csv(path,index=False,mode='a',header=False)
+            count = count + 1
+            # if len(tmp) > 0:
+            #     path = FLAGS.outdir+'/'+type+'.csv'
+            #     if os.path.exists(path):
+            #         tmp.to_csv(path,index=False,mode='a',header=False)
+            #     else:
+            #         tmp.to_csv(path,index=False,mode='a')
+        if FLAGS.delete == True:
+            print("removing read level results")
+            os.system('rm -rf ' + FLAGS.indir+'/'+type)
 

@@ -35,7 +35,7 @@ def predict(test_loader,model):
     model.eval()
     preds = torch.tensor([]).to(device)
     with torch.no_grad():
-        for i, (b_seq,b_stat,b_bse) in enumerate(tqdm(test_loader)):
+        for i, (b_seq,b_stat,b_bse) in enumerate(test_loader):
             b_seq = b_seq.to(device)
             b_stat = b_stat.to(device)
             b_bse = b_bse.to(device)
@@ -46,10 +46,10 @@ def predict(test_loader,model):
 if __name__ == '__main__':
     paser = argparse.ArgumentParser('find modified kmers')
     paser.add_argument('--feature_dir',required=True,help='directory of features')
+    paser.add_argument('--outdir',required=True,help='output directory')
     paser.add_argument('--model_path',required=False,help='path to pretrained model')
     paser.add_argument('--splits',nargs='*',help='splits to process')
-    paser.add_argument('--prefix',default='',help='output prefix')
-    paser.add_argument('--device',default='cuda:0',help='output prefix')
+    paser.add_argument('--device',required=True,help='device')
 
     args = paser.parse_args(sys.argv[1:])
 
@@ -57,25 +57,18 @@ if __name__ == '__main__':
     FLAGS = args
 
     global cfg
-    cfg = {'device':'cuda:0',
-           'batch_size':FLAGS.device}
+    cfg = {'device':FLAGS.device,
+           'batch_size':512}
 
     model = denovoModel().to(cfg['device'])
     model.load_state_dict(torch.load(FLAGS.model_path))
 
-    if len(FLAGS.splits) > 2:
-        splits = ['split' + str(s) for s in FLAGS.splits]
-    else:
-        s1 = int(FLAGS.splits[0])
-        s2 = int(FLAGS.splits[1]) + 1
-        splits = ['split' + str(s) for s in range(s1,s2)]
+    splits = FLAGS.splits
 
-    for split in splits:
+    for split in tqdm(splits):
         test_loader = prepare_dataloader(split)
         preds = predict(test_loader,model)
         mod_status = preds[:,1].detach().cpu().numpy()
-        print(np.sum(mod_status>0.5))
-        print(len(mod_status))
-        np.save(FLAGS.feature_dir + '/' + split +FLAGS.prefix +'_mod',mod_status)
+        np.save(FLAGS.outdir + '/' + split +'_denovo',mod_status)
 
 
