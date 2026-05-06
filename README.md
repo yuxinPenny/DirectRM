@@ -52,7 +52,7 @@ All processes related to DirectRM were tested on
 
 - ##### Target regions
 
-  Please provide a **CSV** file of regions you want analyze. The table should contain following columns, and each line represents one region. The coordinates should be consistent to above reference file.
+  Please provide a **CSV** file of regions you want to analyze. The table should contain following columns, and each line represents one region. The coordinates should be consistent to above reference file.
   
   | seqnames | start | end  | width | strand |
   | -------- | ----- | ---- | ----- | ------ |
