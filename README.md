@@ -243,7 +243,7 @@ python3 /gpfs/work/bio/yuxinzhang17/GlycoRNA/code/inference.py \
 
 #### Available models
 
-We provided four model artchitecture:
+We provided eight model artchitecture:
 
 - model1: {attention} + {fcnn}
 - model2: {attention + LSTM} + {fcnn}
