@@ -56,6 +56,8 @@ if __name__ == '__main__':
     global FLAGS
     FLAGS = args
 
+    os.system('mkdir -p ' + FLAGS.outdir)
+
     global cfg
     cfg = {'device':FLAGS.device,
            'batch_size':512}
