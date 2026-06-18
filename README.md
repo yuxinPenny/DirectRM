@@ -165,6 +165,7 @@ python3 ./DirectRM/scripts/feature_extraction.py \
 
 - `--level`: the k-mers levels table. `./DirectRM/5mer_levels_v1.txt` for data sequenced with SQK-RNA002 kit, `./DirectRM/9mer_levels_v1.txt` for data sequenced with SQK-RNA004 kit.
 - `--step`, `--kmer`: it will extract kmer features with a sliding window. `--kmer` specify the window size [5, 9], `--step` specify the step size of the sliding window.
+- the '--reg' file should be a csv file containing the 'seqnames','start', 'end', and 'strand' columns.
 
 **Note**: `feature_extraction.py` run in single-thread mode by default. For parallel execution, users can manually split `split_array` into multiple bacthes and submit multiple independent jobs. Each batch is processed separately, which allows flexible scaling according to availble computing resources.
 
