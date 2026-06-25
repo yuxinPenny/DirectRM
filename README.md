@@ -295,7 +295,7 @@ Site-level results for each modification class
 
 ## 4 Getting help
 
-We appreciate your feedback and questions. You can report an error or suggestions related to DirectRM as an issue on github.
+We appreciate your feedback and questions. You can report an error or suggestions related to DirectRM as an issue on github or send emails to zhangyuxin@ibp.ac.cn
 
 
 
