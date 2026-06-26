@@ -10,9 +10,9 @@ DirectRM allows simultaneous detection of the six most abundant modifications, n
 It can confidently applied to diverse biological contexts and provide evaluable information to the complex epitranscriptome.
 
 ### Citation
-```
+
 Zhang, Y., Wu, Y., Ma, J. et al. DirectRM: integrated detection of landscape and crosstalk between multiple RNA modifications using direct RNA sequencing. Nat Commun 16, 9450 (2025). https://doi.org/10.1038/s41467-025-64495-8
-```
+
 
 ## 1 Features
 
